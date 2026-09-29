@@ -1,0 +1,18 @@
+﻿joplin:
+  base_url: "http://127.0.0.1:41184"
+  token: "YOUR_JOPLIN_TOKEN"
+  folder_name: "Projects/Lifebot/Tasks"
+  tags: "task,lifebot"
+  work_logs_folder: "Work Logs"
+  todos_folder: "Daily Todos"
+
+pomodoro:
+  default_duration_min: 25
+  short_break_min: 5
+  long_break_min: 15
+  auto_log_break: true
+
+ai_coach:
+  provider: "gemini"
+  api_key: "YOUR_GEMINI_API_KEY"
+  model: "gemini-2.5-flash"

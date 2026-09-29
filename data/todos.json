@@ -1,0 +1,27 @@
+[
+  {
+    "title": "Core System Architecture",
+    "category": "Deep Work",
+    "completed": false
+  },
+  {
+    "title": "Automation Scripting",
+    "category": "Scripting",
+    "completed": false
+  },
+  {
+    "title": "Email & Inbox Zero",
+    "category": "Admin",
+    "completed": false
+  },
+  {
+    "title": "Database Ops",
+    "category": "Ops",
+    "completed": false
+  },
+  {
+    "title": "30 Min Cardio Workout",
+    "category": "Exercise",
+    "completed": false
+  }
+]
