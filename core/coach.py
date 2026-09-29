@@ -57,7 +57,7 @@ class HermesCoach:
             items = items or [fallback]
             return "\n".join(f"- [ ] {t}" for t in items)
         return (
-            "### 🎯 Lifebot Morning Sequence (Hermes Protocol)\n\n"
+            "### 🎯 Rakez Morning Sequence (Hermes Protocol)\n\n"
             f"**Phase 1 (Fresh Energy / High Friction):**\n{bullets(p1, 'High Cognitive Architecture')}\n\n"
             f"**Phase 2 (Moderate Energy / Execution):**\n{bullets(p2, 'Secondary Implementation')}\n\n"
             f"**Phase 3 (High Continuation Momentum):**\n{bullets(p3, 'Admin & Communications')}\n\n"

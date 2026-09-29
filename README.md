@@ -1,4 +1,4 @@
-# Lifebot 🤖 — AI Coach & Pomodoro
+# <img src="assets/logo.svg" width="48" align="top"> Rakez ركّز — AI Coach & Pomodoro
 
 نظام إنتاجية شخصي: مؤقت بومودورو عائم + مهام + مدرب AI (Hermes) + مزامنة ثنائية الاتجاه مع Joplin.
 
