@@ -9,7 +9,7 @@ except Exception:
     pass
 
 from PyQt6.QtCore import Qt, QPoint, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QAction
+from PyQt6.QtGui import QColor, QFont, QAction, QIcon
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QTabWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QLineEdit, QTextEdit,
@@ -262,7 +262,7 @@ class FloatingTimerWidget(QWidget):
             event.accept()
 
 
-class LifebotMainWindow(QMainWindow):
+class RakezMainWindow(QMainWindow):
     def __init__(self, storage: SqliteStorage):
         super().__init__()
         self.storage = storage
@@ -273,7 +273,7 @@ class LifebotMainWindow(QMainWindow):
         )
         self.joplin_folder = _joplin_cfg.get("folder_name", JOPLIN_DEFAULT_FOLDER) or JOPLIN_DEFAULT_FOLDER
         self.joplin_tags = _joplin_cfg.get("tags", "task,lifebot") or "task,lifebot"
-        self.setWindowTitle("Lifebot - AI Coach & Pomodoro")
+        self.setWindowTitle("Rakez ركّز - AI Coach & Pomodoro")
         self.resize(880, 640)
 
         self.floating_widget = FloatingTimerWidget(self.storage)
@@ -300,7 +300,7 @@ class LifebotMainWindow(QMainWindow):
         layout = QVBoxLayout(main_widget)
 
         header = QHBoxLayout()
-        title = QLabel("🤖 Lifebot Productivity System")
+        title = QLabel("🤖 Rakez ركّز Productivity System")
         title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #7aa2f7;")
 
@@ -412,10 +412,10 @@ class LifebotMainWindow(QMainWindow):
 
         sync_row = QHBoxLayout()
         sync_btn = QPushButton("⬆ Sync all to Joplin All-Tasks")
-        sync_btn.setToolTip("Push every open task to the Lifebot notebook in Joplin (skips existing)")
+        sync_btn.setToolTip("Push every open task to the Joplin notebook (skips existing)")
         sync_btn.clicked.connect(self._sync_all_to_joplin)
         pull_btn = QPushButton("⬇ Pull from Joplin")
-        pull_btn.setToolTip("Import todos created in Joplin into Lifebot (skips existing)")
+        pull_btn.setToolTip("Import todos created in Joplin into Rakez (skips existing)")
         pull_btn.clicked.connect(self._pull_from_joplin)
         self.joplin_status_label = QLabel("")
         self.joplin_status_label.setFont(QFont("Segoe UI", 8))
@@ -467,7 +467,7 @@ class LifebotMainWindow(QMainWindow):
         try:
             if QSystemTrayIcon.isSystemTrayAvailable():
                 self.tray = QSystemTrayIcon(self)
-                self.tray.setToolTip("Lifebot")
+                self.tray.setToolTip("Rakez ركّز")
                 menu = QMenu()
                 show_act = QAction("Show Dashboard", self)
                 show_act.triggered.connect(self.show_dashboard)
@@ -570,7 +570,7 @@ class LifebotMainWindow(QMainWindow):
         self._refresh_task_dropdown()
 
     def _sync_all_to_joplin(self):
-        """Push every open Lifebot task into Joplin (skips duplicates)."""
+        """Push every open Rakez task into Joplin (skips duplicates)."""
         if not self.joplin.available:
             self.joplin_status_label.setText("⚠ Joplin not configured — set JOPLIN_TOKEN")
             QMessageBox.warning(self, "Joplin", "Joplin is not configured.\nSet JOPLIN_TOKEN in your .env file.")
@@ -588,7 +588,7 @@ class LifebotMainWindow(QMainWindow):
             QMessageBox.information(self, "Joplin Sync",
                 f"Added {res['created']} task(s), fixed {res['updated']} (tags/due date).\n"
                 f"{res['skipped']} already fine.\n"
-                "Check the Lifebot notebook + All-Tasks board.")
+                "Check the Joplin notebook + All-Tasks board.")
         elif res.get("error"):
             self.joplin_status_label.setText(f"⚠ Joplin: {self.joplin.friendly_error()}")
             QMessageBox.warning(self, "Joplin Sync", f"Sync failed:\n{self.joplin.friendly_error()}")
@@ -596,7 +596,7 @@ class LifebotMainWindow(QMainWindow):
             self.joplin_status_label.setText(f"✓ everything already in All-Tasks ({res['skipped']})")
 
     def _pull_from_joplin(self, silent: bool = False) -> dict:
-        """Import todos created in Joplin into Lifebot. Never crashes."""
+        """Import todos created in Joplin into Rakez. Never crashes."""
         if not self.joplin.available:
             if not silent:
                 self.joplin_status_label.setText("⚠ Joplin not configured — set JOPLIN_TOKEN")
@@ -645,7 +645,7 @@ class LifebotMainWindow(QMainWindow):
 
     def _on_session_finished(self, session):
         self.storage.log_session(session)
-        self._notify("Lifebot", f"Session '{session['task']}' recorded ({session['duration_min']}m).")
+        self._notify("Rakez", f"Session '{session['task']}' recorded ({session['duration_min']}m).")
         if session.get("kind") == "focus":
             self.cycle_label.setText(f"Cycles completed: {self.floating_widget.cycles_done} (long break every 4)")
             # auto-suggest break
@@ -713,13 +713,19 @@ class LifebotMainWindow(QMainWindow):
 
 
 def main():
-    print("🚀 Starting Lifebot GUI & Floating Widget...")
+    print("🚀 Starting Rakez GUI & Floating Widget...")
     storage = SqliteStorage(data_dir=DATA_DIR)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setQuitOnLastWindowClosed(False)
+    try:
+        logo = PROJECT_ROOT / "assets" / "logo.svg"
+        if logo.exists():
+            app.setWindowIcon(QIcon(str(logo)))
+    except Exception:
+        pass
 
-    window = LifebotMainWindow(storage)
+    window = RakezMainWindow(storage)
     window.show()
 
     # two-way sync: pull anything added in Joplin while we were away.
@@ -730,7 +736,7 @@ def main():
     window.floating_widget.show()
     window.floating_widget.move(120, 120)
 
-    print("✓ Lifebot is now running on your screen!")
+    print("✓ Rakez is now running on your screen!")
     sys.exit(app.exec())
 
 

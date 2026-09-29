@@ -1,4 +1,4 @@
-"""Lifebot CLI (typer + rich). Usage: python -m cli.app <command>"""
+"""Rakez CLI (typer + rich). Usage: python -m cli.app <command>"""
 from __future__ import annotations
 import typer
 from rich.table import Table
@@ -14,7 +14,7 @@ from core.storage import SqliteStorage
 from core.coach import HermesCoach
 from core.joplin import DEFAULT_FOLDER as JOPLIN_DEFAULT_FOLDER
 
-app = typer.Typer(help="Lifebot productivity system")
+app = typer.Typer(help="Rakez focus system")
 console = Console()
 
 
@@ -43,7 +43,7 @@ def list_tasks(all: bool = False):
     todos = s.get_todos()
     if not all:
         todos = [t for t in todos if not t.get("completed")]
-    table = Table(title="Lifebot Tasks")
+    table = Table(title="Rakez Tasks")
     table.add_column("ID"); table.add_column("Title"); table.add_column("Cat")
     table.add_column("Pri"); table.add_column("Done"); table.add_column("Pom")
     for t in todos:
