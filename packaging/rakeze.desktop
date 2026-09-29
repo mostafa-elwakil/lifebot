@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Rakez
+Comment=AI Coach & Pomodoro — ركّز
+Exec=/opt/Rakez/Rakez
+Icon=rakeze
+Categories=Office;Productivity;
+Terminal=false
+StartupWMClass=Rakez
