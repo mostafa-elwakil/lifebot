@@ -33,6 +33,22 @@ try:
 except Exception:
     pass
 
+if getattr(sys, "frozen", False):
+    # Running from a PyInstaller bundle: _MEIPASS is read-only temp,
+    # so user data + .env live outside the bundle.
+    if os.name == "nt":
+        DATA_DIR = Path(os.getenv("APPDATA", ".")) / "Rakez" / "data"
+        _exe_dir = Path(sys.executable).resolve().parent
+    else:
+        DATA_DIR = Path.home() / ".local" / "share" / "Rakez" / "data"
+        _exe_dir = Path(sys.executable).resolve().parent
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_exe_dir / ".env")
+        load_dotenv(DATA_DIR / ".env")
+    except Exception:
+        pass
+
 DEFAULTS = {"focus": 25, "short_break": 5, "long_break": 15}
 try:
     cfg = yaml.safe_load((PROJECT_ROOT / "config" / "config.yaml").read_text(encoding="utf-8")) or {}

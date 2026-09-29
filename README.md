@@ -1,4 +1,4 @@
-# <img src="assets/logo.svg" width="48" align="top"> Rakez ركّز — AI Coach & Pomodoro
+﻿# <img src="assets/logo.svg" width="48" align="top"> Rakez ركّز — AI Coach & Pomodoro
 
 نظام إنتاجية شخصي: مؤقت بومودورو عائم + مهام + مدرب AI (Hermes) + مزامنة ثنائية الاتجاه مع Joplin.
 
@@ -113,7 +113,19 @@ python -m pytest tests/ -q     # 16 اختبار
 core/      models.py storage.py(SQLite) coach.py(Gemini+offline) joplin.py(API)
 cli/       app.py (Typer)
 config/    config.yaml prompt.py
+assets/    logo.svg icon.ico icon-*.png make_icon.py
+packaging/ build_windows.py build_linux.sh version_info.txt Rakez.iss rakeze.desktop
 data/      lifebot.db (+ todos.json القديم للهجرة)
 tests/     test_lifebot.py
 run_lifebot.py  (واجهة PyQt6)
 ```
+
+## النسخ الجاهزة | Releases
+
+- **Windows:** شغّل `python packaging/build_windows.py` → ينتج `dist/Rakez.exe`
+  (واجهة رسومية **بدون نافذة terminal**، بالأيقونة وبيانات الناشر Mostafa Elwakil).
+  البيانات تُحفظ في `%APPDATA%\Rakez\data`، والمفاتيح من `.env` بجانب الـ exe.
+- **مثبت Windows:** ثبّت Inno Setup 6 ثم `iscc packaging\Rakez.iss` → ينتج `dist/Rakez-Setup-1.0.0.exe`
+  (أيقونة سطح مكتب اختيارية + تشغيل بعد التثبيت).
+- **Linux:** على جهاز لينكس شغّل `bash packaging/build_linux.sh` → ينتج `dist/Rakez`
+  (+ ملف `packaging/rakeze.desktop` لقائمة التطبيقات، بدون terminal).
