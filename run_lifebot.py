@@ -15,12 +15,14 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QLineEdit, QTextEdit,
     QListWidget, QListWidgetItem, QComboBox, QSpinBox, QMessageBox,
     QGraphicsDropShadowEffect, QInputDialog, QSystemTrayIcon, QMenu,
-    QCheckBox
+    QCheckBox, QSizePolicy, QSizeGrip
 )
 
 from core.storage import SqliteStorage, CATEGORIES
 from core.coach import HermesCoach
 from core.joplin import JoplinClient, DEFAULT_FOLDER as JOPLIN_DEFAULT_FOLDER
+from core.settings import load_settings, save_settings, ACCENTS, DEFAULTS as SETTINGS_DEFAULTS
+from core.settings import SOUND_NAMES
 
 import yaml
 
@@ -63,12 +65,23 @@ except Exception:
     _ai_cfg = {}
 
 
-def play_done_sound(app: QApplication | None = None):
-    """Cross-platform done beep: winsound on Windows, else Qt beep."""
+SOUND_PATTERNS = {
+    "Default beep": [(880, 300), (660, 300)],
+    "Chime": [(660, 200), (880, 200), (1320, 350)],
+    "Alert": [(440, 150), (440, 150), (880, 400)],
+    "Silent": [],
+}
+
+
+def play_done_sound(app: QApplication | None = None, sound: str = "Default beep"):
+    """Cross-platform done sound: winsound patterns on Windows, else Qt beep."""
+    pattern = SOUND_PATTERNS.get(sound, SOUND_PATTERNS["Default beep"])
+    if not pattern:
+        return
     try:
         import winsound
-        winsound.Beep(880, 300)
-        winsound.Beep(660, 300)
+        for freq, ms in pattern:
+            winsound.Beep(freq, ms)
         return
     except Exception:
         pass
@@ -82,6 +95,7 @@ def play_done_sound(app: QApplication | None = None):
 class FloatingTimerWidget(QWidget):
     open_dashboard_requested = pyqtSignal()
     session_completed = pyqtSignal(dict)
+    quit_requested = pyqtSignal()
 
     def __init__(self, storage: SqliteStorage):
         super().__init__()
@@ -97,6 +111,8 @@ class FloatingTimerWidget(QWidget):
 
         self.mode = "focus"  # focus | short_break | long_break
         self.cycles_done = 0
+        self.accent = "#7aa2f7"
+        self.sound = "Default beep"
         self.remaining_seconds = DEFAULTS["focus"] * 60
         self.total_seconds = DEFAULTS["focus"] * 60
         self.is_running = False
@@ -107,26 +123,50 @@ class FloatingTimerWidget(QWidget):
         self.timer.timeout.connect(self._tick)
         self._init_ui()
 
+    def _float_style(self) -> str:
+        a = self.accent
+        return f"""
+            QWidget#container {{
+                background-color: rgba(26, 27, 38, 0.95);
+                border: 2px solid {a};
+                border-radius: 16px;
+            }}
+            QLabel {{ color: #c0caf5; font-family: 'Segoe UI', Arial; }}
+            QPushButton {{
+                background-color: #24283b;
+                border: 1px solid {a};
+                border-radius: 8px;
+                color: {a};
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: {a}; color: #1a1b26; }}
+        """
+
+    def set_accent(self, accent: str):
+        self.accent = accent or "#7aa2f7"
+        try:
+            self._float_container.setStyleSheet(self._float_style())
+        except Exception:
+            pass
+
+    def set_size(self, w: int, h: int):
+        self.setMinimumSize(260, 90)
+        self.resize(max(260, w), max(90, h))
+
+    def set_sound(self, sound: str):
+        from core.settings import SOUND_NAMES
+        self.sound = sound if sound in SOUND_NAMES else "Default beep"
+
     def _init_ui(self):
-        self.setFixedSize(370, 96)
+        # resizable: only a minimum size, user can drag any edge/corner
+        self.setMinimumSize(300, 104)
+        self.resize(370, 104)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         container = QWidget(self)
         container.setObjectName("container")
-        container.setStyleSheet("""
-            QWidget#container {
-                background-color: rgba(26, 27, 38, 0.95);
-                border: 2px solid #7aa2f7;
-                border-radius: 16px;
-            }
-            QLabel { color: #c0caf5; font-family: 'Segoe UI', Arial; }
-            QPushButton {
-                background-color: #24283b;
-                border: 1px solid #7aa2f7;
-                border-radius: 8px;
-                color: #7aa2f7;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #7aa2f7; color: #1a1b26; }
-        """)
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._float_container = container
+        container.setStyleSheet(self._float_style())
 
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
@@ -182,8 +222,16 @@ class FloatingTimerWidget(QWidget):
         self.reset_btn.setFixedSize(34, 28)
         self.reset_btn.setToolTip("Reset timer")
         self.reset_btn.clicked.connect(self.reset_timer)
+        self.quit_btn = QPushButton("✕")
+        self.quit_btn.setFixedSize(34, 28)
+        self.quit_btn.setToolTip("Quit Rakez completely")
+        self.quit_btn.setStyleSheet(
+            "QPushButton { border-color: #f7768e; color: #f7768e; }"
+            "QPushButton:hover { background-color: #f7768e; color: #1a1b26; }")
+        self.quit_btn.clicked.connect(self.quit_requested.emit)
         row2.addWidget(self.break_btn)
         row2.addWidget(self.reset_btn)
+        row2.addWidget(self.quit_btn)
 
         btn_layout.addLayout(row1)
         btn_layout.addLayout(row2)
@@ -192,6 +240,14 @@ class FloatingTimerWidget(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(container)
+        # resize handle (frameless windows have no native one)
+        grip_row = QHBoxLayout()
+        grip_row.setContentsMargins(0, 0, 6, 2)
+        grip_row.addStretch()
+        grip = QSizeGrip(self)
+        grip.setToolTip("Drag to resize")
+        grip_row.addWidget(grip)
+        main_layout.addLayout(grip_row)
 
     def set_task(self, task_name, category, duration_min=25):
         self.current_task = task_name
@@ -249,7 +305,7 @@ class FloatingTimerWidget(QWidget):
             self.is_running = False
             self.toggle_btn.setText("▶")
             self.time_label.setText("DONE!")
-            play_done_sound(QApplication.instance())
+            play_done_sound(QApplication.instance(), self.sound)
             finished_mode = self.mode
             payload = {
                 "task": self.current_task if finished_mode == "focus" else f"{finished_mode} break",
@@ -282,19 +338,34 @@ class RakezMainWindow(QMainWindow):
     def __init__(self, storage: SqliteStorage):
         super().__init__()
         self.storage = storage
+        # GUI settings file wins over .env when non-empty (editable in Settings tab)
+        self.app_settings = load_settings(DATA_DIR)
+        gemini_key = self.app_settings.get("gemini_key") or os.getenv("GEMINI_API_KEY", "")
+        if gemini_key:
+            os.environ["GEMINI_API_KEY"] = gemini_key
+        joplin_token = (self.app_settings.get("joplin_token")
+                        or os.getenv("JOPLIN_TOKEN", _joplin_cfg.get("token", "")))
+        joplin_base = (self.app_settings.get("joplin_base")
+                       or _joplin_cfg.get("base_url", "http://127.0.0.1:41184"))
         self.coach = HermesCoach(model=_ai_cfg.get("model", "gemini-2.5-flash"))
-        self.joplin = JoplinClient(
-            base_url=_joplin_cfg.get("base_url", "http://127.0.0.1:41184"),
-            token=os.getenv("JOPLIN_TOKEN", _joplin_cfg.get("token", "")),
-        )
-        self.joplin_folder = _joplin_cfg.get("folder_name", JOPLIN_DEFAULT_FOLDER) or JOPLIN_DEFAULT_FOLDER
-        self.joplin_tags = _joplin_cfg.get("tags", "task,lifebot") or "task,lifebot"
+        self.joplin = JoplinClient(base_url=joplin_base, token=joplin_token)
+        self.joplin_folder = (self.app_settings.get("joplin_folder")
+                              or _joplin_cfg.get("folder_name", JOPLIN_DEFAULT_FOLDER)
+                              or JOPLIN_DEFAULT_FOLDER)
+        self.joplin_tags = (self.app_settings.get("joplin_tags")
+                            or _joplin_cfg.get("tags", "task,lifebot") or "task,lifebot")
         self.setWindowTitle("Rakez ركّز - AI Coach & Pomodoro")
         self.resize(880, 640)
 
         self.floating_widget = FloatingTimerWidget(self.storage)
         self.floating_widget.open_dashboard_requested.connect(self.show_dashboard)
         self.floating_widget.session_completed.connect(self._on_session_finished)
+        self.floating_widget.quit_requested.connect(self._quit_app)
+        # apply saved widget look
+        self.floating_widget.set_accent(self.app_settings.get("accent", "#7aa2f7"))
+        self.floating_widget.set_size(self.app_settings.get("widget_w", 370),
+                                      self.app_settings.get("widget_h", 104))
+        self.floating_widget.set_sound(self.app_settings.get("sound", "Default beep"))
 
         self._apply_theme()
         self._init_ui()
@@ -343,6 +414,7 @@ class RakezMainWindow(QMainWindow):
         tabs.addTab(self._create_todos_tab(), "📋 Tasks")
         tabs.addTab(self._create_coach_tab(), "🧠 Hermes AI Coach")
         tabs.addTab(self._create_analytics_tab(), "📊 Analytics")
+        tabs.addTab(self._create_settings_tab(), "⚙️ Settings")
         layout.addWidget(tabs)
 
         self.setCentralWidget(main_widget)
@@ -478,6 +550,151 @@ class RakezMainWindow(QMainWindow):
         self._load_analytics()
         return tab
 
+    def _create_settings_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        s = self.app_settings
+
+        # --- widget size ---
+        layout.addWidget(QLabel("🔳 Floating widget size:"))
+        size_row = QHBoxLayout()
+        size_row.addWidget(QLabel("Width:"))
+        self.set_w_spin = QSpinBox()
+        self.set_w_spin.setRange(260, 700)
+        self.set_w_spin.setValue(int(s.get("widget_w", 370)))
+        size_row.addWidget(self.set_w_spin)
+        size_row.addWidget(QLabel("Height:"))
+        self.set_h_spin = QSpinBox()
+        self.set_h_spin.setRange(90, 320)
+        self.set_h_spin.setValue(int(s.get("widget_h", 104)))
+        size_row.addWidget(self.set_h_spin)
+        size_apply = QPushButton("Apply size")
+        size_apply.clicked.connect(self._apply_widget_size)
+        size_row.addWidget(size_apply)
+        size_row.addStretch()
+        layout.addLayout(size_row)
+
+        # --- accent color ---
+        layout.addWidget(QLabel("🎨 Accent color:"))
+        accent_row = QHBoxLayout()
+        self.accent_combo = QComboBox()
+        self.accent_combo.addItems(list(ACCENTS.keys()))
+        cur_hex = s.get("accent", "#7aa2f7")
+        for name, hx in ACCENTS.items():
+            if hx == cur_hex:
+                self.accent_combo.setCurrentText(name)
+                break
+        self.accent_combo.currentTextChanged.connect(self._apply_accent)
+        accent_row.addWidget(self.accent_combo)
+        accent_row.addStretch()
+        layout.addLayout(accent_row)
+
+        # --- notification sound ---
+        layout.addWidget(QLabel("🔔 Notification sound:"))
+        sound_row = QHBoxLayout()
+        self.sound_combo = QComboBox()
+        self.sound_combo.addItems(SOUND_NAMES)
+        cur_sound = s.get("sound", "Default beep")
+        if cur_sound in SOUND_NAMES:
+            self.sound_combo.setCurrentText(cur_sound)
+        self.sound_combo.currentTextChanged.connect(self._apply_sound)
+        sound_row.addWidget(self.sound_combo)
+        sound_test = QPushButton("🔊 Test")
+        sound_test.setToolTip("Preview the selected sound")
+        sound_test.clicked.connect(self._test_sound)
+        sound_row.addWidget(sound_test)
+        sound_row.addStretch()
+        layout.addLayout(sound_row)
+
+        # --- API keys (no .env needed) ---
+        layout.addWidget(QLabel("🔑 API keys (saved locally, applied instantly):"))
+        self.gemini_edit = QLineEdit()
+        self.gemini_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.gemini_edit.setPlaceholderText("GEMINI_API_KEY (empty = offline coach)")
+        self.gemini_edit.setText(s.get("gemini_key", "") or os.getenv("GEMINI_API_KEY", ""))
+        layout.addWidget(self.gemini_edit)
+
+        self.joplin_token_edit = QLineEdit()
+        self.joplin_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.joplin_token_edit.setPlaceholderText("JOPLIN_TOKEN (Joplin → Web Clipper)")
+        self.joplin_token_edit.setText(s.get("joplin_token", ""))
+        layout.addWidget(self.joplin_token_edit)
+
+        base_row = QHBoxLayout()
+        base_row.addWidget(QLabel("Base:"))
+        self.joplin_base_edit = QLineEdit()
+        self.joplin_base_edit.setText(s.get("joplin_base", "http://127.0.0.1:41184"))
+        base_row.addWidget(self.joplin_base_edit, stretch=2)
+        base_row.addWidget(QLabel("Folder:"))
+        self.joplin_folder_edit = QLineEdit()
+        self.joplin_folder_edit.setText(self.joplin_folder)
+        base_row.addWidget(self.joplin_folder_edit, stretch=2)
+        base_row.addWidget(QLabel("Tags:"))
+        self.joplin_tags_edit = QLineEdit()
+        self.joplin_tags_edit.setText(self.joplin_tags)
+        base_row.addWidget(self.joplin_tags_edit, stretch=1)
+        layout.addLayout(base_row)
+
+        save_btn = QPushButton("💾 Save settings")
+        save_btn.setStyleSheet("background-color: #9ece6a; color: #1a1b26; font-size: 13px; padding: 10px;")
+        save_btn.clicked.connect(self._save_settings)
+        layout.addWidget(save_btn)
+        self.settings_status = QLabel("")
+        self.settings_status.setFont(QFont("Segoe UI", 8))
+        layout.addWidget(self.settings_status)
+        layout.addStretch()
+        return tab
+
+    def _apply_widget_size(self):
+        w, h = self.set_w_spin.value(), self.set_h_spin.value()
+        self.floating_widget.set_size(w, h)
+        self.app_settings["widget_w"] = w
+        self.app_settings["widget_h"] = h
+        save_settings(DATA_DIR, self.app_settings)
+
+    def _apply_accent(self, name: str):
+        hx = ACCENTS.get(name, "#7aa2f7")
+        self.floating_widget.set_accent(hx)
+        self.app_settings["accent"] = hx
+        save_settings(DATA_DIR, self.app_settings)
+
+    def _apply_sound(self, name: str):
+        self.floating_widget.set_sound(name)
+        self.app_settings["sound"] = self.floating_widget.sound
+        save_settings(DATA_DIR, self.app_settings)
+
+    def _test_sound(self):
+        play_done_sound(QApplication.instance(), self.sound_combo.currentText())
+
+    def _save_settings(self):
+        s = self.app_settings
+        s["widget_w"] = self.set_w_spin.value()
+        s["widget_h"] = self.set_h_spin.value()
+        s["accent"] = ACCENTS.get(self.accent_combo.currentText(), "#7aa2f7")
+        s["gemini_key"] = self.gemini_edit.text().strip()
+        s["joplin_token"] = self.joplin_token_edit.text().strip()
+        s["joplin_base"] = self.joplin_base_edit.text().strip() or "http://127.0.0.1:41184"
+        s["joplin_folder"] = self.joplin_folder_edit.text().strip() or JOPLIN_DEFAULT_FOLDER
+        s["joplin_tags"] = self.joplin_tags_edit.text().strip() or "task,lifebot"
+        s["sound"] = self.sound_combo.currentText()
+        ok = save_settings(DATA_DIR, s)
+        # apply instantly — no restart, no .env
+        if s["gemini_key"]:
+            os.environ["GEMINI_API_KEY"] = s["gemini_key"]
+        elif "GEMINI_API_KEY" in os.environ:
+            del os.environ["GEMINI_API_KEY"]
+        self.coach.online = bool(os.getenv("GEMINI_API_KEY"))
+        self.joplin.token = s["joplin_token"] or os.getenv("JOPLIN_TOKEN", "")
+        self.joplin.base_url = s["joplin_base"].rstrip("/")
+        self.joplin_folder = s["joplin_folder"]
+        self.joplin_tags = s["joplin_tags"]
+        self.floating_widget.set_accent(s["accent"])
+        self.floating_widget.set_size(s["widget_w"], s["widget_h"])
+        self.floating_widget.set_sound(s["sound"])
+        mode = "🟢 Gemini AI" if self.coach.online else "🟡 Offline coach"
+        self.status_label.setText(f"{mode}  •  Joplin: {self.joplin.status()}")
+        self.settings_status.setText("✓ saved to settings.json" if ok else "⚠ save failed")
+
     def _init_tray(self):
         self.tray = None
         try:
@@ -488,7 +705,7 @@ class RakezMainWindow(QMainWindow):
                 show_act = QAction("Show Dashboard", self)
                 show_act.triggered.connect(self.show_dashboard)
                 quit_act = QAction("Quit", self)
-                quit_act.triggered.connect(QApplication.instance().quit)
+                quit_act.triggered.connect(self._quit_app)
                 menu.addAction(show_act)
                 menu.addAction(quit_act)
                 self.tray.setContextMenu(menu)
@@ -514,6 +731,19 @@ class RakezMainWindow(QMainWindow):
     def show_dashboard(self):
         self.show()
         self.activateWindow()
+
+    def _quit_app(self):
+        """Quit the whole program (floating ✕ button or tray Quit)."""
+        try:
+            if self.tray is not None:
+                self.tray.hide()
+        except Exception:
+            pass
+        try:
+            self.floating_widget.hide()
+        except Exception:
+            pass
+        QApplication.instance().quit()
 
     def _refresh_task_dropdown(self):
         self.task_selector.clear()
