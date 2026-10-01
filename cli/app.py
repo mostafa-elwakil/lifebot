@@ -118,5 +118,13 @@ def dedupe(folder: str = JOPLIN_DEFAULT_FOLDER, apply: bool = False):
         console.print(f"Deleted {len(res['deleted'])} duplicates (see Joplin Trash).")
 
 
+@app.command()
+def serve(port: int = 8765):
+    """Run the local HTTP API (for TestSprite backend runs and integrations)."""
+    from core.api import run_server
+    console.print(f"Rakez API on http://127.0.0.1:{port}  (Ctrl+C to stop)")
+    run_server(port=port)
+
+
 if __name__ == "__main__":
     app()

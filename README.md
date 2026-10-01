@@ -104,8 +104,24 @@ columns:
 ## التطوير | Development
 
 ```bash
-python -m pytest tests/ -q     # 16 اختبار
+python -m pytest tests/ -q     # 23 اختبار
 ```
+
+## واجهة HTTP المحلية | Local API (للاختبار والتكامل)
+
+```bash
+python -m cli.app serve --port 8765
+# API_TOKEN=secret python -m cli.app serve   # بوضع المصادقة (Bearer)
+```
+
+| الطلب | الوصف |
+|---|---|
+| `GET /health` | فحص |
+| `GET /tasks` / `POST /tasks` | قائمة / إنشاء `{title, category?, priority?, estimate?}` |
+| `PUT /tasks/<id>` | تحديث `{completed?, title?, category?, priority?}` |
+| `DELETE /tasks/<id>` | حذف |
+| `GET /sessions` / `POST /sessions` | الجلسات `{task, category?, duration_min?, kind?}` |
+| `GET /stats?days=7` | الإحصائيات |
 
 البنية:
 
