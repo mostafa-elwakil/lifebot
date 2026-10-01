@@ -9,7 +9,7 @@ except Exception:
     pass
 
 from PyQt6.QtCore import Qt, QPoint, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QAction, QIcon
+from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QCursor
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QTabWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QLineEdit, QTextEdit,
@@ -180,6 +180,9 @@ class FloatingTimerWidget(QWidget):
         self.task_label = QLabel(self.current_task)
         self.task_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         self.task_label.setStyleSheet("color: #7aa2f7;")
+        self.task_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.task_label.setToolTip("Click to switch task")
+        self.task_label.mousePressEvent = lambda _e: self._switch_task_menu()
 
         self.cat_label = QLabel(f"🏷️ {self.current_category}")
         self.cat_label.setFont(QFont("Segoe UI", 8))
@@ -248,6 +251,29 @@ class FloatingTimerWidget(QWidget):
         grip.setToolTip("Drag to resize")
         grip_row.addWidget(grip)
         main_layout.addLayout(grip_row)
+
+    def _switch_task_menu(self):
+        """Popup menu of open tasks — switch without opening the dashboard."""
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background-color: #1f2335; color: #c0caf5; border: 1px solid #414868; }"
+            "QMenu::item:selected { background-color: #7aa2f7; color: #1a1b26; }")
+        open_tasks = [t for t in self.storage.get_todos() if not t.get("completed")]
+        if not open_tasks:
+            act = menu.addAction("(no open tasks)")
+            act.setEnabled(False)
+        for t in open_tasks[:20]:
+            label = f"{t.get('title')}  [{t.get('category')}]"
+            if t.get("title") == self.current_task:
+                label = "● " + label
+            act = menu.addAction(label)
+            act.setData(t)
+        chosen = menu.exec(QCursor.pos())
+        if chosen is not None and chosen.data() is not None:
+            t = chosen.data()
+            self.set_task(t["title"], t["category"], round(self.total_seconds / 60))
+            if self.is_running:
+                self.toggle_timer()  # pause — fresh period for the new task
 
     def set_task(self, task_name, category, duration_min=25):
         self.current_task = task_name

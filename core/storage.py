@@ -1,11 +1,22 @@
 """SQLite storage with JSON migration. Backward compatible API."""
 from __future__ import annotations
+import functools
 import json
 import sqlite3
+import threading
 from pathlib import Path
 from datetime import datetime, timedelta
 
 from .models import Todo, FocusSession
+
+
+def _locked(method):
+    """Serialize DB access across threads (HTTP API shares one connection)."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return wrapper
 
 DEFAULT_TODOS = [
     {"title": "Core System Architecture", "category": "Deep Work"},
@@ -29,8 +40,11 @@ class SqliteStorage:
         self.data_dir = base
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.data_dir / "lifebot.db"
-        self._conn = sqlite3.connect(str(self.db_path))
+        # check_same_thread=False + RLock: the HTTP API serves each request
+        # on its own thread sharing this connection.
+        self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._lock = threading.RLock()
         self._init_schema()
         self._migrate_json_once()
 
@@ -86,6 +100,7 @@ class SqliteStorage:
         "estimate_pomodoros,done_pomodoros,created_at) VALUES(?,?,?,?,?,?,?,?)"
     )
 
+    @_locked
     def _insert_todo(self, todo: Todo, commit: bool = True):
         self._conn.execute(
             self._INSERT_SQL,
@@ -96,11 +111,13 @@ class SqliteStorage:
             self._conn.commit()
 
     # --- backward-compatible API (dicts) ---
+    @_locked
     def get_todos(self) -> list[dict]:
         cur = self._conn.cursor()
         cur.execute("SELECT * FROM todos ORDER BY completed, created_at")
         return [dict(r) | {"completed": bool(r["completed"])} for r in cur.fetchall()]
 
+    @_locked
     def save_todos(self, todos: list[dict]):
         # single transaction: a mid-loop failure must not leave an empty table
         with self._conn:
@@ -114,6 +131,7 @@ class SqliteStorage:
                      todo.created_at),
                 )
 
+    @_locked
     def add_todo(self, title: str, category: str = "Deep Work", priority: str = "medium",
                  estimate: int = 1) -> dict:
         title = (title or "").strip()
@@ -124,6 +142,7 @@ class SqliteStorage:
         self._insert_todo(todo)
         return todo.to_dict()
 
+    @_locked
     def log_session(self, session: dict):
         self._conn.execute(
             "INSERT INTO sessions(task,category,duration_min,kind,timestamp) VALUES(?,?,?,?,?)",
@@ -140,12 +159,14 @@ class SqliteStorage:
             )
             self._conn.commit()
 
+    @_locked
     def get_sessions(self) -> list[dict]:
         cur = self._conn.cursor()
         cur.execute("SELECT task,category,duration_min,kind,timestamp FROM sessions ORDER BY timestamp")
         return [dict(r) for r in cur.fetchall()]
 
     # --- new CRUD ---
+    @_locked
     def set_completed(self, todo_id_or_title: str, completed: bool = True) -> bool:
         cur = self._conn.cursor()
         cur.execute("UPDATE todos SET completed=? WHERE id=? OR title=?",
@@ -153,18 +174,49 @@ class SqliteStorage:
         self._conn.commit()
         return cur.rowcount > 0
 
+    @_locked
     def delete_todo(self, todo_id_or_title: str) -> bool:
         cur = self._conn.cursor()
         cur.execute("DELETE FROM todos WHERE id=? OR title=?", (todo_id_or_title, todo_id_or_title))
         self._conn.commit()
         return cur.rowcount > 0
 
+    @_locked
     def clear_completed(self) -> int:
         cur = self._conn.cursor()
         cur.execute("DELETE FROM todos WHERE completed=1")
         self._conn.commit()
         return cur.rowcount
 
+    @_locked
+    def get_todo(self, todo_id_or_title: str) -> dict | None:
+        """Fetch one todo by id or exact title. Thread-safe (for the API)."""
+        cur = self._conn.cursor()
+        cur.execute("SELECT * FROM todos WHERE id=? OR title=?",
+                    (todo_id_or_title, todo_id_or_title))
+        row = cur.fetchone()
+        return (dict(row) | {"completed": bool(row["completed"])}) if row else None
+
+    @_locked
+    def update_todo(self, todo_id_or_title: str, fields: dict) -> dict | None:
+        """Update whitelisted fields; returns the updated todo or None."""
+        allowed = {"title", "category", "priority", "completed"}
+        row = self.get_todo(todo_id_or_title)
+        if row is None:
+            return None
+        sets, vals = [], []
+        for k, v in fields.items():
+            if k not in allowed:
+                continue
+            sets.append(f"{k}=?")
+            vals.append(int(bool(v)) if k == "completed" else v)
+        if sets:
+            self._conn.execute(
+                f"UPDATE todos SET {', '.join(sets)} WHERE id=?", (*vals, row["id"]))
+            self._conn.commit()
+        return self.get_todo(row["id"])
+
+    @_locked
     def import_todos(self, todos: list[dict]) -> dict:
         """Merge external todos (e.g. from Joplin) skipping existing titles.
 
@@ -196,6 +248,7 @@ class SqliteStorage:
             return {"added": 0, "skipped": 0}
 
     # --- stats ---
+    @_locked
     def stats(self, days: int = 7) -> dict:
         sessions = self.get_sessions()
         todos = self.get_todos()
@@ -224,6 +277,7 @@ class SqliteStorage:
             "streak_days": streak,
         }
 
+    @_locked
     def close(self):
         try:
             self._conn.commit()
