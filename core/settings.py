@@ -13,6 +13,11 @@ DEFAULTS = {
     "joplin_folder": "Projects/Lifebot/Tasks",
     "joplin_tags": "task,lifebot",
     "sound": "Default beep",
+    "google_client_id": "",
+    "google_client_secret": "",
+    "design": "pill",
+    "background": "#1a1b26",
+    "opacity": 95,
 }
 
 ACCENTS = {
@@ -25,6 +30,31 @@ ACCENTS = {
 
 #: Notification sound names (patterns live in run_lifebot.SOUND_PATTERNS).
 SOUND_NAMES = ["Default beep", "Chime", "Alert", "Silent"]
+
+#: Widget designs.
+DESIGNS = {"Glass Pill": "pill", "Neon Card": "neon", "Split Flip": "split"}
+
+#: Card background colors.
+BACKGROUNDS = {
+    "Tokyo Night": "#1a1b26",
+    "Pure Black": "#0d0d12",
+    "Deep Navy": "#16213e",
+    "Slate": "#2a2e45",
+}
+
+#: Extra combo entry that opens a full color picker.
+CUSTOM_LABEL = "🎨 Custom…"
+
+
+def valid_hex(value: str) -> bool:
+    v = (value or "").strip()
+    if len(v) != 7 or not v.startswith("#"):
+        return False
+    try:
+        int(v[1:], 16)
+        return True
+    except ValueError:
+        return False
 
 FILENAME = "settings.json"
 
@@ -55,10 +85,18 @@ def load_settings(data_dir: str | Path) -> dict:
         cfg["widget_h"] = max(90, min(320, int(cfg.get("widget_h", 104))))
     except (TypeError, ValueError):
         cfg["widget_h"] = 104
-    if cfg.get("accent") not in set(ACCENTS.values()):
+    if not valid_hex(cfg.get("accent", "")):
         cfg["accent"] = DEFAULTS["accent"]
     if cfg.get("sound") not in SOUND_NAMES:
         cfg["sound"] = DEFAULTS["sound"]
+    if cfg.get("design") not in ("pill", "neon", "split"):
+        cfg["design"] = DEFAULTS["design"]
+    if not valid_hex(cfg.get("background", "")):
+        cfg["background"] = DEFAULTS["background"]
+    try:
+        cfg["opacity"] = max(30, min(100, int(cfg.get("opacity", 95))))
+    except (TypeError, ValueError):
+        cfg["opacity"] = 95
     return cfg
 
 

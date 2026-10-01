@@ -101,6 +101,14 @@ columns:
 | اللوحة صفر رغم وجود المهام | تأكد أن اللوحة تقرأ نفس النوت بوك + دوس ⟳ أعلى اللوحة |
 | `Pull` لا يجد مهام Joplin | لازم **New to-do** (مش note) **داخل** نوت بوك المهام |
 
+## ربط Google (Calendar + Tasks) | Google integration
+
+1. من [Google Cloud Console](https://console.cloud.google.com): مشروع جديد → فعّل **Google Calendar API** و **Google Tasks API**.
+2. OAuth consent screen (External/test mode) + ضيف إيميلك كـ test user.
+3. Credentials → Create OAuth client ID (نوع **Desktop app**) → انسخ الـ Client ID والـ Secret.
+4. في تبويب ⚙️ Settings: الصقهما → 💾 Save → 🔓 Authorize (المتصفح يفتح مرة واحدة).
+5. الاستخدام: جلسة التركيز تُسجَّل في Calendar لو علّمت ☑ في تبويب Pomodoro — والمهام دفع/سحب من تبويب Tasks.
+
 ## التطوير | Development
 
 ```bash

@@ -9,20 +9,21 @@ except Exception:
     pass
 
 from PyQt6.QtCore import Qt, QPoint, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QCursor
+from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QCursor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QTabWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QLineEdit, QTextEdit,
     QListWidget, QListWidgetItem, QComboBox, QSpinBox, QMessageBox,
     QGraphicsDropShadowEffect, QInputDialog, QSystemTrayIcon, QMenu,
-    QCheckBox, QSizePolicy, QSizeGrip
+    QCheckBox, QSizePolicy, QSizeGrip, QProgressBar, QGridLayout, QFrame
 )
 
 from core.storage import SqliteStorage, CATEGORIES
 from core.coach import HermesCoach
 from core.joplin import JoplinClient, DEFAULT_FOLDER as JOPLIN_DEFAULT_FOLDER
 from core.settings import load_settings, save_settings, ACCENTS, DEFAULTS as SETTINGS_DEFAULTS
-from core.settings import SOUND_NAMES
+from core.settings import SOUND_NAMES, DESIGNS, BACKGROUNDS, valid_hex
+from core.google_sync import GoogleSync
 
 import yaml
 
@@ -92,10 +93,59 @@ def play_done_sound(app: QApplication | None = None, sound: str = "Default beep"
         pass
 
 
+class _RingWidget(QWidget):
+    """Circular progress ring with % text (Glass Pill design)."""
+
+    def __init__(self, parent=None, color="#7aa2f7", size=84):
+        super().__init__(parent)
+        self._value = 0
+        self._color = QColor(color)
+        self.setFixedSize(size, size)
+
+    def setValue(self, v: int):
+        self._value = max(0, min(100, int(v)))
+        self.update()
+
+    def setColor(self, color: str):
+        self._color = QColor(color)
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        side = min(self.width(), self.height()) - 12
+        x = (self.width() - side) // 2
+        y = (self.height() - side) // 2
+        pen = QPen(QColor("#414868"), 6)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.drawEllipse(x, y, side, side)
+        pen = QPen(self._color, 6)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.drawArc(x, y, side, side, 90 * 16, -int(self._value / 100 * 360 * 16))
+        p.setPen(QColor("#c0caf5"))
+        p.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, f"{self._value}%")
+        p.end()
+
+
+def _clear_layout(layout):
+    while layout.count():
+        item = layout.takeAt(0)
+        w = item.widget()
+        if w is not None:
+            w.deleteLater()
+        elif item.layout() is not None:
+            _clear_layout(item.layout())
+
+
 class FloatingTimerWidget(QWidget):
     open_dashboard_requested = pyqtSignal()
     session_completed = pyqtSignal(dict)
     quit_requested = pyqtSignal()
+    task_added = pyqtSignal(dict)
+    widget_size_changed = pyqtSignal(int, int)
 
     def __init__(self, storage: SqliteStorage):
         super().__init__()
@@ -112,7 +162,10 @@ class FloatingTimerWidget(QWidget):
         self.mode = "focus"  # focus | short_break | long_break
         self.cycles_done = 0
         self.accent = "#7aa2f7"
+        self.background = "#1a1b26"
+        self.design = "pill"  # pill | neon | split
         self.sound = "Default beep"
+        self.setWindowOpacity(0.95)
         self.remaining_seconds = DEFAULTS["focus"] * 60
         self.total_seconds = DEFAULTS["focus"] * 60
         self.is_running = False
@@ -123,11 +176,21 @@ class FloatingTimerWidget(QWidget):
         self.timer.timeout.connect(self._tick)
         self._init_ui()
 
+    @staticmethod
+    def _hex_to_rgb(hx: str) -> str:
+        hx = (hx or "#1a1b26").lstrip("#")
+        try:
+            r, g, b = int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)
+        except Exception:
+            r, g, b = 26, 27, 38
+        return f"{r}, {g}, {b}"
+
     def _float_style(self) -> str:
         a = self.accent
+        bg = self._hex_to_rgb(self.background)
         return f"""
             QWidget#container {{
-                background-color: rgba(26, 27, 38, 0.95);
+                background-color: rgba({bg}, 0.95);
                 border: 2px solid {a};
                 border-radius: 16px;
             }}
@@ -140,22 +203,57 @@ class FloatingTimerWidget(QWidget):
                 font-weight: bold;
             }}
             QPushButton:hover {{ background-color: {a}; color: #1a1b26; }}
+            QProgressBar {{
+                background-color: #24283b;
+                border: 1px solid #414868;
+                border-radius: 4px;
+                text-align: center;
+            }}
+            QProgressBar::chunk {{ background-color: {a}; border-radius: 3px; }}
         """
 
     def set_accent(self, accent: str):
-        self.accent = accent or "#7aa2f7"
-        try:
-            self._float_container.setStyleSheet(self._float_style())
-        except Exception:
-            pass
+        self.accent = accent if valid_hex(accent) else "#7aa2f7"
+        self._build_design()
+
+    def set_background(self, background: str):
+        self.background = background if valid_hex(background) else "#1a1b26"
+        self._build_design()
+
+    DESIGN_MIN_SIZES = {"pill": (280, 96), "neon": (380, 140), "split": (420, 110)}
+    DESIGN_DEFAULT_SIZES = {"pill": (370, 104), "neon": (430, 150), "split": (470, 120)}
+
+    def set_design(self, design: str):
+        self.design = design if design in ("pill", "neon", "split") else "pill"
+        mw, mh = self.DESIGN_MIN_SIZES[self.design]
+        self.setMinimumSize(mw, mh)
+        w, h = self.DESIGN_DEFAULT_SIZES[self.design]
+        self.resize(max(mw, w), max(mh, h))
+        self._build_design()
 
     def set_size(self, w: int, h: int):
-        self.setMinimumSize(260, 90)
-        self.resize(max(260, w), max(90, h))
+        mw, mh = self.DESIGN_MIN_SIZES.get(self.design, (260, 90))
+        self.setMinimumSize(mw, mh)
+        self.resize(max(mw, w), max(mh, h))
 
     def set_sound(self, sound: str):
         from core.settings import SOUND_NAMES
         self.sound = sound if sound in SOUND_NAMES else "Default beep"
+
+    def set_opacity(self, percent: int):
+        try:
+            pct = max(30, min(100, int(percent)))
+        except (TypeError, ValueError):
+            pct = 95
+        self.setWindowOpacity(pct / 100.0)
+        return pct
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        try:
+            self.widget_size_changed.emit(self.width(), self.height())
+        except Exception:
+            pass
 
     def _init_ui(self):
         # resizable: only a minimum size, user can drag any edge/corner
@@ -173,13 +271,25 @@ class FloatingTimerWidget(QWidget):
         shadow.setColor(QColor(0, 0, 0, 180))
         container.setGraphicsEffect(shadow)
 
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(15, 10, 15, 10)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(container)
+        # resize handle (frameless windows have no native one)
+        grip_row = QHBoxLayout()
+        grip_row.setContentsMargins(0, 0, 6, 2)
+        grip_row.addStretch()
+        grip = QSizeGrip(self)
+        grip.setToolTip("Drag to resize")
+        grip_row.addWidget(grip)
+        main_layout.addLayout(grip_row)
+        self._build_design()
 
-        info_layout = QVBoxLayout()
+    # ---------- designs ----------
+    def _make_task_labels(self, time_size: int = 15):
+        """Shared labels (recreated on every design build)."""
         self.task_label = QLabel(self.current_task)
         self.task_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        self.task_label.setStyleSheet("color: #7aa2f7;")
+        self.task_label.setStyleSheet(f"color: {self.accent};")
         self.task_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self.task_label.setToolTip("Click to switch task")
         self.task_label.mousePressEvent = lambda _e: self._switch_task_menu()
@@ -192,65 +302,204 @@ class FloatingTimerWidget(QWidget):
         self.mode_label.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
         self.mode_label.setStyleSheet("color: #9ece6a;")
 
-        info_layout.addWidget(self.task_label)
-        info_layout.addWidget(self.cat_label)
-        info_layout.addWidget(self.mode_label)
-        layout.addLayout(info_layout, stretch=3)
-
         self.time_label = QLabel(f"{DEFAULTS['focus']:02d}:00")
-        self.time_label.setFont(QFont("Consolas", 15, QFont.Weight.Bold))
+        self.time_label.setFont(QFont("Consolas", time_size, QFont.Weight.Bold))
         self.time_label.setStyleSheet("color: #9ece6a;")
-        layout.addWidget(self.time_label, stretch=2)
+        self._update_time_display()
 
-        btn_layout = QVBoxLayout()
-        row1 = QHBoxLayout()
-        self.toggle_btn = QPushButton("▶")
-        self.toggle_btn.setFixedSize(34, 34)
-        self.toggle_btn.setToolTip("Start/Pause")
-        self.toggle_btn.clicked.connect(self.toggle_timer)
+    def _make_buttons(self):
+        toggle_btn = QPushButton("▶")
+        toggle_btn.setFixedSize(34, 34)
+        toggle_btn.setToolTip("Start/Pause")
+        toggle_btn.clicked.connect(self.toggle_timer)
 
-        self.expand_btn = QPushButton("⛶")
-        self.expand_btn.setFixedSize(34, 34)
-        self.expand_btn.setToolTip("Open dashboard")
-        self.expand_btn.clicked.connect(self.open_dashboard_requested.emit)
-        row1.addWidget(self.toggle_btn)
-        row1.addWidget(self.expand_btn)
+        expand_btn = QPushButton("⛶")
+        expand_btn.setFixedSize(34, 34)
+        expand_btn.setToolTip("Open dashboard")
+        expand_btn.clicked.connect(self.open_dashboard_requested.emit)
 
-        row2 = QHBoxLayout()
-        self.break_btn = QPushButton("☕")
-        self.break_btn.setFixedSize(34, 28)
-        self.break_btn.setToolTip("Start short break")
-        self.break_btn.clicked.connect(lambda: self.start_break("short_break"))
-        self.reset_btn = QPushButton("↺")
-        self.reset_btn.setFixedSize(34, 28)
-        self.reset_btn.setToolTip("Reset timer")
-        self.reset_btn.clicked.connect(self.reset_timer)
-        self.quit_btn = QPushButton("✕")
-        self.quit_btn.setFixedSize(34, 28)
-        self.quit_btn.setToolTip("Quit Rakez completely")
-        self.quit_btn.setStyleSheet(
+        add_btn = QPushButton("+")
+        add_btn.setFixedSize(34, 34)
+        add_btn.setToolTip("Quick add task")
+        add_btn.clicked.connect(self._quick_add_dialog)
+
+        break_btn = QPushButton("☕")
+        break_btn.setFixedSize(34, 28)
+        break_btn.setToolTip("Start short break")
+        break_btn.clicked.connect(lambda: self.start_break("short_break"))
+
+        reset_btn = QPushButton("↺")
+        reset_btn.setFixedSize(34, 28)
+        reset_btn.setToolTip("Reset timer")
+        reset_btn.clicked.connect(self.reset_timer)
+
+        quit_btn = QPushButton("✕")
+        quit_btn.setFixedSize(34, 28)
+        quit_btn.setToolTip("Quit Rakez completely")
+        quit_btn.setStyleSheet(
             "QPushButton { border-color: #f7768e; color: #f7768e; }"
             "QPushButton:hover { background-color: #f7768e; color: #1a1b26; }")
-        self.quit_btn.clicked.connect(self.quit_requested.emit)
-        row2.addWidget(self.break_btn)
-        row2.addWidget(self.reset_btn)
-        row2.addWidget(self.quit_btn)
+        quit_btn.clicked.connect(self.quit_requested.emit)
 
-        btn_layout.addLayout(row1)
-        btn_layout.addLayout(row2)
-        layout.addLayout(btn_layout)
+        self.toggle_btn = toggle_btn
+        self.expand_btn = expand_btn
+        self.add_btn = add_btn
+        self.break_btn = break_btn
+        self.reset_btn = reset_btn
+        self.quit_btn = quit_btn
+        return toggle_btn, expand_btn, add_btn, break_btn, reset_btn, quit_btn
 
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(container)
-        # resize handle (frameless windows have no native one)
-        grip_row = QHBoxLayout()
-        grip_row.setContentsMargins(0, 0, 6, 2)
-        grip_row.addStretch()
-        grip = QSizeGrip(self)
-        grip.setToolTip("Drag to resize")
-        grip_row.addWidget(grip)
-        main_layout.addLayout(grip_row)
+    def _make_bar(self, height: int = 8):
+        bar = QProgressBar()
+        bar.setRange(0, 100)
+        bar.setValue(0)
+        bar.setTextVisible(False)
+        bar.setFixedHeight(height)
+        return bar
+
+    def _build_design(self):
+        """Rebuild the container content for the active design."""
+        if not hasattr(self, "_float_container"):
+            return
+        mw, mh = self.DESIGN_MIN_SIZES.get(self.design, (280, 96))
+        self.setMinimumSize(mw, mh)
+        lay = self._float_container.layout()
+        if lay is not None:
+            _clear_layout(lay)
+        else:
+            lay = QHBoxLayout(self._float_container)
+        self._float_container.setStyleSheet(self._float_style())
+        self.ring = None
+        self.bar = None
+        {"pill": self._build_pill, "neon": self._build_neon,
+         "split": self._build_split}[self.design](lay)
+        self._refresh_progress()
+
+    def _build_pill(self, layout):
+        """A — Glass Pill: ring + info + time + thin progress line."""
+        layout.setContentsMargins(15, 10, 15, 10)
+        self._make_task_labels(time_size=15)
+        self.ring = _RingWidget(color=self.accent)
+        self.ring.setValue(self._elapsed_pct())
+        layout.addWidget(self.ring)
+
+        info = QVBoxLayout()
+        info.addWidget(self.task_label)
+        info.addWidget(self.cat_label)
+        info.addWidget(self.mode_label)
+        layout.addLayout(info, stretch=3)
+
+        mid = QVBoxLayout()
+        mid.addWidget(self.time_label, stretch=2)
+        self.bar = self._make_bar(height=6)
+        mid.addWidget(self.bar)
+        layout.addLayout(mid, stretch=2)
+
+        t, e, a, b, r, q = self._make_buttons()
+        btns = QVBoxLayout()
+        row1 = QHBoxLayout()
+        row1.addWidget(t)
+        row1.addWidget(e)
+        row1.addWidget(a)
+        row2 = QHBoxLayout()
+        row2.addWidget(b)
+        row2.addWidget(r)
+        row2.addWidget(q)
+        btns.addLayout(row1)
+        btns.addLayout(row2)
+        layout.addLayout(btns)
+
+    def _build_neon(self, layout):
+        """B — Neon Card: badge + huge time + chunky progress bar."""
+        layout.setContentsMargins(15, 12, 15, 12)
+        self._make_task_labels(time_size=26)
+        self.mode_label.setStyleSheet(
+            f"background-color: {self.accent}; color: #1a1b26; "
+            "font-weight: bold; border-radius: 6px; padding: 3px 10px;")
+        outer = QVBoxLayout()
+        top = QHBoxLayout()
+        top.addWidget(self.mode_label)
+        top.addWidget(self.task_label, stretch=1)
+        top.addWidget(self.cat_label)
+        outer.addLayout(top)
+        mid = QHBoxLayout()
+        mid.addWidget(self.time_label, stretch=3)
+        t, e, a, b, r, q = self._make_buttons()
+        grid = QGridLayout()
+        grid.addWidget(t, 0, 0)
+        grid.addWidget(e, 0, 1)
+        grid.addWidget(a, 0, 2)
+        grid.addWidget(b, 1, 0)
+        grid.addWidget(r, 1, 1)
+        grid.addWidget(q, 1, 2)
+        mid.addLayout(grid)
+        outer.addLayout(mid)
+        self.bar = self._make_bar(height=10)
+        outer.addWidget(self.bar)
+        layout.addLayout(outer)
+
+    def _build_split(self, layout):
+        """C — Split Flip: time block + info/controls block."""
+        layout.setContentsMargins(12, 10, 12, 10)
+        self._make_task_labels(time_size=20)
+        left = QFrame()
+        left.setStyleSheet(
+            f"QFrame {{ background-color: rgba(0,0,0,0.25); "
+            f"border: 1px solid {self.accent}; border-radius: 12px; }}")
+        lv = QVBoxLayout(left)
+        lv.addWidget(self.time_label)
+        lv.addWidget(self.mode_label)
+        self.bar = self._make_bar(height=6)
+        lv.addWidget(self.bar)
+        layout.addWidget(left, stretch=2)
+
+        right = QVBoxLayout()
+        right.addWidget(self.task_label)
+        right.addWidget(self.cat_label)
+        t, e, a, b, r, q = self._make_buttons()
+        grid = QGridLayout()
+        grid.addWidget(t, 0, 0)
+        grid.addWidget(e, 0, 1)
+        grid.addWidget(a, 0, 2)
+        grid.addWidget(b, 1, 0)
+        grid.addWidget(r, 1, 1)
+        grid.addWidget(q, 1, 2)
+        right.addLayout(grid)
+        layout.addLayout(right, stretch=3)
+
+    def _quick_add_dialog(self):
+        """Quick-add a task from the floating widget (title + category)."""
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox
+        from core.storage import CATEGORIES as _CATS
+        dlg = QDialog(self)
+        dlg.setWindowTitle("New task")
+        dlg.setMinimumWidth(280)
+        lay = QVBoxLayout(dlg)
+        title_edit = QLineEdit(dlg)
+        title_edit.setPlaceholderText("Task title...")
+        lay.addWidget(title_edit)
+        cat_combo = QComboBox(dlg)
+        cat_combo.addItems(_CATS)
+        lay.addWidget(cat_combo)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, dlg)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        lay.addWidget(buttons)
+        title_edit.setFocus()
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        title = title_edit.text().strip()
+        if not title:
+            return
+        try:
+            todo = self.storage.add_todo(title, cat_combo.currentText())
+        except ValueError:
+            return
+        self.set_task(todo["title"], todo["category"], round(self.total_seconds / 60))
+        if self.is_running:
+            self.toggle_timer()  # pause — fresh period for the new task
+        self.task_added.emit(todo)
 
     def _switch_task_menu(self):
         """Popup menu of open tasks — switch without opening the dashboard."""
@@ -344,10 +593,28 @@ class FloatingTimerWidget(QWidget):
                 self.cycles_done += 1
             self.session_completed.emit(payload)
 
+    def _elapsed_pct(self) -> int:
+        if not self.total_seconds:
+            return 0
+        done = self.total_seconds - self.remaining_seconds
+        return max(0, min(100, round(done / self.total_seconds * 100)))
+
+    def _refresh_progress(self):
+        pct = self._elapsed_pct()
+        try:
+            if getattr(self, "ring", None) is not None:
+                self.ring.setValue(pct)
+                self.ring.setColor(self.accent)
+            if getattr(self, "bar", None) is not None:
+                self.bar.setValue(pct)
+        except Exception:
+            pass
+
     def _update_time_display(self):
         mins = self.remaining_seconds // 60
         secs = self.remaining_seconds % 60
         self.time_label.setText(f"{mins:02d}:{secs:02d}")
+        self._refresh_progress()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -380,6 +647,10 @@ class RakezMainWindow(QMainWindow):
                               or JOPLIN_DEFAULT_FOLDER)
         self.joplin_tags = (self.app_settings.get("joplin_tags")
                             or _joplin_cfg.get("tags", "task,lifebot") or "task,lifebot")
+        self.gsync = GoogleSync(
+            data_dir=DATA_DIR,
+            client_id=self.app_settings.get("google_client_id", ""),
+            client_secret=self.app_settings.get("google_client_secret", ""))
         self.setWindowTitle("Rakez ركّز - AI Coach & Pomodoro")
         self.resize(880, 640)
 
@@ -387,11 +658,22 @@ class RakezMainWindow(QMainWindow):
         self.floating_widget.open_dashboard_requested.connect(self.show_dashboard)
         self.floating_widget.session_completed.connect(self._on_session_finished)
         self.floating_widget.quit_requested.connect(self._quit_app)
+        self.floating_widget.task_added.connect(self._on_widget_task_added)
+        self.floating_widget.widget_size_changed.connect(self._on_widget_resized)
+        self._settings_save_timer = QTimer(self)
+        self._settings_save_timer.setSingleShot(True)
+        self._settings_save_timer.timeout.connect(
+            lambda: save_settings(DATA_DIR, self.app_settings))
         # apply saved widget look
-        self.floating_widget.set_accent(self.app_settings.get("accent", "#7aa2f7"))
+        self.floating_widget.background = self.app_settings.get("background", "#1a1b26")
+        self.floating_widget.accent = self.app_settings.get("accent", "#7aa2f7")
+        self.floating_widget.design = self.app_settings.get("design", "pill")
+        self.floating_widget.set_sound(self.app_settings.get("sound", "Default beep"))
         self.floating_widget.set_size(self.app_settings.get("widget_w", 370),
                                       self.app_settings.get("widget_h", 104))
-        self.floating_widget.set_sound(self.app_settings.get("sound", "Default beep"))
+        self.floating_widget.set_opacity(self.app_settings.get("opacity", 95))
+        self.floating_widget._build_design()
+        self.floating_widget._build_design()
 
         self._apply_theme()
         self._init_ui()
@@ -471,6 +753,10 @@ class RakezMainWindow(QMainWindow):
         self.cycle_label = QLabel("Cycles completed: 0 (long break every 4)")
         layout.addWidget(self.cycle_label)
 
+        self.cal_check = QCheckBox("📅 Log finished focus to Google Calendar")
+        self.cal_check.setToolTip("Creates a calendar event when a focus session completes")
+        layout.addWidget(self.cal_check)
+
         start_btn = QPushButton("🚀 Send Task to Floating Widget & Start")
         start_btn.setStyleSheet("background-color: #9ece6a; color: #1a1b26; font-size: 14px; padding: 12px;")
         start_btn.clicked.connect(self._start_pomodoro)
@@ -537,6 +823,20 @@ class RakezMainWindow(QMainWindow):
         sync_row.addWidget(pull_btn)
         sync_row.addWidget(self.joplin_status_label, stretch=1)
         layout.addLayout(sync_row)
+
+        grow = QHBoxLayout()
+        gpush_btn = QPushButton("📤 Selected → Google Tasks")
+        gpush_btn.setToolTip("Push the selected task to Google Tasks")
+        gpush_btn.clicked.connect(self._push_selected_to_google)
+        grow.addWidget(gpush_btn)
+        gpull_btn = QPushButton("📥 Google Tasks → Rakez")
+        gpull_btn.setToolTip("Import open Google Tasks (skips existing)")
+        gpull_btn.clicked.connect(self._pull_from_google)
+        grow.addWidget(gpull_btn)
+        self.google_status_label = QLabel("")
+        self.google_status_label.setFont(QFont("Segoe UI", 8))
+        grow.addWidget(self.google_status_label, stretch=1)
+        layout.addLayout(grow)
         return tab
 
     def _create_coach_tab(self):
@@ -615,6 +915,45 @@ class RakezMainWindow(QMainWindow):
         accent_row.addStretch()
         layout.addLayout(accent_row)
 
+        # --- widget design + background ---
+        layout.addWidget(QLabel("🖌️ Widget design & background:"))
+        design_row = QHBoxLayout()
+        design_row.addWidget(QLabel("Design:"))
+        self.design_combo = QComboBox()
+        self.design_combo.addItems(list(DESIGNS.keys()))
+        cur_design = s.get("design", "pill")
+        for name, key in DESIGNS.items():
+            if key == cur_design:
+                self.design_combo.setCurrentText(name)
+                break
+        self.design_combo.currentTextChanged.connect(self._apply_design)
+        design_row.addWidget(self.design_combo)
+        design_row.addWidget(QLabel("Background:"))
+        self.bg_combo = QComboBox()
+        self.bg_combo.addItems(list(BACKGROUNDS.keys()))
+        cur_bg = s.get("background", "#1a1b26")
+        for name, hx in BACKGROUNDS.items():
+            if hx == cur_bg:
+                self.bg_combo.setCurrentText(name)
+                break
+        self.bg_combo.currentTextChanged.connect(self._apply_background)
+        design_row.addWidget(self.bg_combo)
+        design_row.addStretch()
+        layout.addLayout(design_row)
+
+        # --- transparency ---
+        layout.addWidget(QLabel("🔆 Widget transparency:"))
+        op_row = QHBoxLayout()
+        op_row.addWidget(QLabel("Opacity:"))
+        self.opacity_spin = QSpinBox()
+        self.opacity_spin.setRange(30, 100)
+        self.opacity_spin.setSuffix(" %")
+        self.opacity_spin.setValue(int(s.get("opacity", 95)))
+        self.opacity_spin.valueChanged.connect(self._apply_opacity)
+        op_row.addWidget(self.opacity_spin)
+        op_row.addStretch()
+        layout.addLayout(op_row)
+
         # --- notification sound ---
         layout.addWidget(QLabel("🔔 Notification sound:"))
         sound_row = QHBoxLayout()
@@ -661,6 +1000,25 @@ class RakezMainWindow(QMainWindow):
         base_row.addWidget(self.joplin_tags_edit, stretch=1)
         layout.addLayout(base_row)
 
+        # --- Google (Calendar + Tasks) ---
+        layout.addWidget(QLabel("📅 Google Calendar + Tasks (OAuth client from Google Cloud Console):"))
+        grow = QHBoxLayout()
+        grow.addWidget(QLabel("Client ID:"))
+        self.google_id_edit = QLineEdit()
+        self.google_id_edit.setPlaceholderText("...apps.googleusercontent.com")
+        self.google_id_edit.setText(s.get("google_client_id", ""))
+        grow.addWidget(self.google_id_edit, stretch=2)
+        grow.addWidget(QLabel("Secret:"))
+        self.google_secret_edit = QLineEdit()
+        self.google_secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.google_secret_edit.setText(s.get("google_client_secret", ""))
+        grow.addWidget(self.google_secret_edit, stretch=2)
+        auth_btn = QPushButton("🔓 Authorize")
+        auth_btn.setToolTip("Open browser once to grant access")
+        auth_btn.clicked.connect(self._authorize_google)
+        grow.addWidget(auth_btn)
+        layout.addLayout(grow)
+
         save_btn = QPushButton("💾 Save settings")
         save_btn.setStyleSheet("background-color: #9ece6a; color: #1a1b26; font-size: 13px; padding: 10px;")
         save_btn.clicked.connect(self._save_settings)
@@ -689,6 +1047,23 @@ class RakezMainWindow(QMainWindow):
         self.app_settings["sound"] = self.floating_widget.sound
         save_settings(DATA_DIR, self.app_settings)
 
+    def _apply_design(self, name: str):
+        key = DESIGNS.get(name, "pill")
+        self.floating_widget.set_design(key)
+        self.app_settings["design"] = key
+        save_settings(DATA_DIR, self.app_settings)
+
+    def _apply_background(self, name: str):
+        hx = BACKGROUNDS.get(name, "#1a1b26")
+        self.floating_widget.set_background(hx)
+        self.app_settings["background"] = hx
+        save_settings(DATA_DIR, self.app_settings)
+
+    def _apply_opacity(self, value: int):
+        pct = self.floating_widget.set_opacity(value)
+        self.app_settings["opacity"] = pct
+        save_settings(DATA_DIR, self.app_settings)
+
     def _test_sound(self):
         play_done_sound(QApplication.instance(), self.sound_combo.currentText())
 
@@ -697,12 +1072,17 @@ class RakezMainWindow(QMainWindow):
         s["widget_w"] = self.set_w_spin.value()
         s["widget_h"] = self.set_h_spin.value()
         s["accent"] = ACCENTS.get(self.accent_combo.currentText(), "#7aa2f7")
+        s["background"] = BACKGROUNDS.get(self.bg_combo.currentText(), "#1a1b26")
         s["gemini_key"] = self.gemini_edit.text().strip()
         s["joplin_token"] = self.joplin_token_edit.text().strip()
         s["joplin_base"] = self.joplin_base_edit.text().strip() or "http://127.0.0.1:41184"
         s["joplin_folder"] = self.joplin_folder_edit.text().strip() or JOPLIN_DEFAULT_FOLDER
         s["joplin_tags"] = self.joplin_tags_edit.text().strip() or "task,lifebot"
         s["sound"] = self.sound_combo.currentText()
+        s["design"] = DESIGNS.get(self.design_combo.currentText(), "pill")
+        s["opacity"] = self.opacity_spin.value()
+        s["google_client_id"] = self.google_id_edit.text().strip()
+        s["google_client_secret"] = self.google_secret_edit.text().strip()
         ok = save_settings(DATA_DIR, s)
         # apply instantly — no restart, no .env
         if s["gemini_key"]:
@@ -714,12 +1094,56 @@ class RakezMainWindow(QMainWindow):
         self.joplin.base_url = s["joplin_base"].rstrip("/")
         self.joplin_folder = s["joplin_folder"]
         self.joplin_tags = s["joplin_tags"]
+        self.gsync.client_id = s["google_client_id"]
+        self.gsync.client_secret = s["google_client_secret"]
+        self.gsync._cal = self.gsync._tasks = None
+        self.google_status_label.setText(f"Google: {self.gsync.status()}")
         self.floating_widget.set_accent(s["accent"])
         self.floating_widget.set_size(s["widget_w"], s["widget_h"])
         self.floating_widget.set_sound(s["sound"])
+        self.floating_widget.set_design(s["design"])
+        self.floating_widget.set_background(s["background"])
+        self.floating_widget.set_opacity(s["opacity"])
+        self.opacity_spin.blockSignals(True)
+        self.opacity_spin.setValue(int(s["opacity"]))
+        self.opacity_spin.blockSignals(False)
         mode = "🟢 Gemini AI" if self.coach.online else "🟡 Offline coach"
         self.status_label.setText(f"{mode}  •  Joplin: {self.joplin.status()}")
         self.settings_status.setText("✓ saved to settings.json" if ok else "⚠ save failed")
+
+    def _authorize_google(self):
+        self.google_status_label.setText("⏳ opening browser for Google authorization...")
+        QApplication.processEvents()
+        if self.gsync.authorize():
+            self.google_status_label.setText("✓ Google connected")
+            QMessageBox.information(self, "Google", "Connected! Tokens saved locally.")
+        else:
+            self.google_status_label.setText(f"⚠ Google: {self.gsync.last_error}")
+            QMessageBox.warning(self, "Google", f"Authorization failed:\n{self.gsync.last_error}")
+
+    def _push_selected_to_google(self):
+        key = self._selected_todo_key()
+        if not key:
+            return
+        todos = {t["id"]: t for t in self.storage.get_todos()}
+        t = todos.get(key)
+        if not t:
+            return
+        res = self.gsync.push_task(t["title"], f"Category: {t.get('category','')}")
+        self.google_status_label.setText("✓ in Google Tasks" if res
+                                         else f"⚠ Google: {self.gsync.last_error or self.gsync.status()}")
+
+    def _pull_from_google(self):
+        incoming = self.gsync.pull_tasks()
+        if not incoming and self.gsync.last_error:
+            self.google_status_label.setText(f"⚠ Google: {self.gsync.last_error}")
+            return
+        res = self.storage.import_todos(incoming)
+        if res.get("added"):
+            self._load_todos_list()
+            self._refresh_task_dropdown()
+        self.google_status_label.setText(
+            f"✓ Google has {len(incoming)} open — pulled {res['added']}")
 
     def _init_tray(self):
         self.tray = None
@@ -757,6 +1181,27 @@ class RakezMainWindow(QMainWindow):
     def show_dashboard(self):
         self.show()
         self.activateWindow()
+
+    def _on_widget_task_added(self, todo: dict):
+        """Refresh lists when a task is quick-added from the floating widget."""
+        self._load_todos_list()
+        self._refresh_task_dropdown()
+
+    def _on_widget_resized(self, w: int, h: int):
+        """Mirror corner-resize dimensions into the Settings tab (debounced save)."""
+        try:
+            if hasattr(self, "set_w_spin"):
+                self.set_w_spin.blockSignals(True)
+                self.set_h_spin.blockSignals(True)
+                self.set_w_spin.setValue(w)
+                self.set_h_spin.setValue(h)
+                self.set_w_spin.blockSignals(False)
+                self.set_h_spin.blockSignals(False)
+            self.app_settings["widget_w"] = w
+            self.app_settings["widget_h"] = h
+            self._settings_save_timer.start(800)
+        except Exception:
+            pass
 
     def _quit_app(self):
         """Quit the whole program (floating ✕ button or tray Quit)."""
@@ -919,6 +1364,14 @@ class RakezMainWindow(QMainWindow):
         self.storage.log_session(session)
         self._notify("Rakez", f"Session '{session['task']}' recorded ({session['duration_min']}m).")
         if session.get("kind") == "focus":
+            # optional: log to Google Calendar (never blocks/crashes)
+            try:
+                if getattr(self, "cal_check", None) is not None and self.cal_check.isChecked():
+                    ev = self.gsync.log_focus_event(session["task"], session.get("duration_min", 25))
+                    if ev:
+                        self._notify("Rakez", "Logged to Google Calendar 📅")
+            except Exception:
+                pass
             self.cycle_label.setText(f"Cycles completed: {self.floating_widget.cycles_done} (long break every 4)")
             # auto-suggest break
             minutes = self.break_spin.value() if hasattr(self, "break_spin") else DEFAULTS["short_break"]
