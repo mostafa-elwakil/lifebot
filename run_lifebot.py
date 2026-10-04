@@ -14,8 +14,9 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QTabWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QLineEdit, QTextEdit,
     QListWidget, QListWidgetItem, QComboBox, QSpinBox, QMessageBox,
-    QGraphicsDropShadowEffect, QInputDialog, QSystemTrayIcon, QMenu,
-    QCheckBox, QSizePolicy, QSizeGrip, QProgressBar, QGridLayout, QFrame
+    QInputDialog, QSystemTrayIcon, QMenu,
+    QCheckBox, QSizePolicy, QSizeGrip, QProgressBar, QGridLayout, QFrame,
+    QScrollArea
 )
 
 from core.storage import SqliteStorage, CATEGORIES
@@ -135,6 +136,9 @@ def _clear_layout(layout):
         item = layout.takeAt(0)
         w = item.widget()
         if w is not None:
+            # hide immediately: deleteLater is deferred, and stale widgets
+            # would otherwise keep painting (ghost buttons) until then
+            w.hide()
             w.deleteLater()
         elif item.layout() is not None:
             _clear_layout(item.layout())
@@ -146,6 +150,7 @@ class FloatingTimerWidget(QWidget):
     quit_requested = pyqtSignal()
     task_added = pyqtSignal(dict)
     widget_size_changed = pyqtSignal(int, int)
+    notice_answered = pyqtSignal(object)
 
     def __init__(self, storage: SqliteStorage):
         super().__init__()
@@ -163,8 +168,9 @@ class FloatingTimerWidget(QWidget):
         self.cycles_done = 0
         self.accent = "#7aa2f7"
         self.background = "#1a1b26"
-        self.design = "pill"  # pill | neon | split
+        self.design = "pill"  # pill | neon | split | retro
         self.sound = "Default beep"
+        self._pre_form_size = None
         self.setWindowOpacity(0.95)
         self.remaining_seconds = DEFAULTS["focus"] * 60
         self.total_seconds = DEFAULTS["focus"] * 60
@@ -185,14 +191,28 @@ class FloatingTimerWidget(QWidget):
             r, g, b = 26, 27, 38
         return f"{r}, {g}, {b}"
 
-    def _float_style(self) -> str:
+    def _float_style(self, attached: bool = False) -> str:
         a = self.accent
         bg = self._hex_to_rgb(self.background)
+        bottom = "0px" if attached else "16px"
         return f"""
             QWidget#container {{
                 background-color: rgba({bg}, 0.95);
                 border: 2px solid {a};
-                border-radius: 16px;
+                border-top-left-radius: 16px;
+                border-top-right-radius: 16px;
+                border-bottom-left-radius: {bottom};
+                border-bottom-right-radius: {bottom};
+                border-bottom: {"none" if attached else f"2px solid {a}"};
+            }}
+            QWidget#attached {{
+                background-color: rgba({bg}, 0.95);
+                border: 2px solid {a};
+                border-top: none;
+                border-top-left-radius: 0px;
+                border-top-right-radius: 0px;
+                border-bottom-left-radius: 16px;
+                border-bottom-right-radius: 16px;
             }}
             QLabel {{ color: #c0caf5; font-family: 'Segoe UI', Arial; }}
             QPushButton {{
@@ -203,6 +223,13 @@ class FloatingTimerWidget(QWidget):
                 font-weight: bold;
             }}
             QPushButton:hover {{ background-color: {a}; color: #1a1b26; }}
+            QLineEdit, QComboBox {{
+                background-color: #24283b;
+                border: 1px solid #414868;
+                border-radius: 6px;
+                color: #c0caf5;
+                padding: 5px;
+            }}
             QProgressBar {{
                 background-color: #24283b;
                 border: 1px solid #414868;
@@ -212,6 +239,12 @@ class FloatingTimerWidget(QWidget):
             QProgressBar::chunk {{ background-color: {a}; border-radius: 3px; }}
         """
 
+    def _restyle(self, attached: bool):
+        try:
+            self.setStyleSheet(self._float_style(attached=attached))
+        except Exception:
+            pass
+
     def set_accent(self, accent: str):
         self.accent = accent if valid_hex(accent) else "#7aa2f7"
         self._build_design()
@@ -220,11 +253,14 @@ class FloatingTimerWidget(QWidget):
         self.background = background if valid_hex(background) else "#1a1b26"
         self._build_design()
 
-    DESIGN_MIN_SIZES = {"pill": (280, 96), "neon": (380, 140), "split": (420, 110)}
-    DESIGN_DEFAULT_SIZES = {"pill": (370, 104), "neon": (430, 150), "split": (470, 120)}
+    DESIGN_MIN_SIZES = {"pill": (280, 96), "neon": (380, 140), "split": (420, 110),
+                        "retro": (340, 420)}
+    DESIGN_DEFAULT_SIZES = {"pill": (370, 104), "neon": (430, 150), "split": (470, 120),
+                            "retro": (380, 480)}
 
     def set_design(self, design: str):
-        self.design = design if design in ("pill", "neon", "split") else "pill"
+        self.design = design if design in ("pill", "neon", "split", "retro") else "pill"
+        self._build_design()
         mw, mh = self.DESIGN_MIN_SIZES[self.design]
         self.setMinimumSize(mw, mh)
         w, h = self.DESIGN_DEFAULT_SIZES[self.design]
@@ -264,15 +300,14 @@ class FloatingTimerWidget(QWidget):
         container.setObjectName("container")
         container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._float_container = container
-        container.setStyleSheet(self._float_style())
 
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setColor(QColor(0, 0, 0, 180))
-        container.setGraphicsEffect(shadow)
+        # NOTE: no QGraphicsDropShadowEffect — on Windows a blur shadow on a
+        # translucent frameless window spams "UpdateLayeredWindowIndirect
+        # failed (The parameter is incorrect)".
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         main_layout.addWidget(container)
         # resize handle (frameless windows have no native one)
         grip_row = QHBoxLayout()
@@ -283,6 +318,130 @@ class FloatingTimerWidget(QWidget):
         grip_row.addWidget(grip)
         main_layout.addLayout(grip_row)
         self._build_design()
+        self._build_inline_panel(main_layout)
+
+    def _build_inline_panel(self, main_layout):
+        """Attached slide-down panel: quick-add form AND inline notices.
+
+        Same card style as the widget — no separate windows.
+        """
+        from core.storage import CATEGORIES as _CATS
+        self.inline_panel = QWidget(self)
+        self.inline_panel.setObjectName("attached")
+        self.inline_panel.setVisible(False)
+        pv = QVBoxLayout(self.inline_panel)
+        pv.setContentsMargins(12, 8, 12, 8)
+
+        # --- quick-add form ---
+        self.inline_form = QWidget()
+        fv = QVBoxLayout(self.inline_form)
+        fv.setContentsMargins(0, 0, 0, 0)
+        self.inline_title = QLineEdit()
+        self.inline_title.setPlaceholderText("Task title... (Enter to add)")
+        self.inline_title.returnPressed.connect(self._submit_inline_task)
+        fv.addWidget(self.inline_title)
+        frow = QHBoxLayout()
+        self.inline_category = QComboBox()
+        self.inline_category.addItems(_CATS)
+        frow.addWidget(self.inline_category, stretch=2)
+        ok_btn = QPushButton("Add")
+        ok_btn.clicked.connect(self._submit_inline_task)
+        frow.addWidget(ok_btn, stretch=1)
+        cancel_btn = QPushButton("✕")
+        cancel_btn.setFixedWidth(36)
+        cancel_btn.setToolTip("Close")
+        cancel_btn.clicked.connect(self._hide_panel)
+        frow.addWidget(cancel_btn)
+        fv.addLayout(frow)
+        pv.addWidget(self.inline_form)
+
+        # --- notice area ---
+        self.inline_notice = QWidget()
+        nv = QVBoxLayout(self.inline_notice)
+        nv.setContentsMargins(0, 0, 0, 0)
+        self.notice_label = QLabel("")
+        self.notice_label.setWordWrap(True)
+        self.notice_label.setFont(QFont("Segoe UI", 9))
+        nv.addWidget(self.notice_label)
+        self.notice_btns = QHBoxLayout()
+        nv.addLayout(self.notice_btns)
+        pv.addWidget(self.inline_notice)
+
+        main_layout.insertWidget(1, self.inline_panel)
+        self._notice_timer = QTimer(self)
+        self._notice_timer.setSingleShot(True)
+        self._notice_timer.timeout.connect(self._hide_panel)
+
+    def _show_panel(self, form: bool):
+        self.inline_form.setVisible(form)
+        self.inline_notice.setVisible(not form)
+        self.inline_panel.setVisible(True)
+        self._restyle(True)  # merge visually with the card above
+        self._notice_timer.stop()
+
+    def _hide_panel(self):
+        self._notice_timer.stop()
+        self.inline_panel.setVisible(False)
+        self._restyle(False)  # restore full rounded card
+        # restore pre-form size (auto-grow is temporary)
+        try:
+            saved = getattr(self, "_pre_form_size", None)
+            if saved is not None:
+                mw, mh = self.DESIGN_MIN_SIZES.get(self.design, (280, 96))
+                self.resize(max(mw, saved.width()), max(mh, saved.height()))
+                self._pre_form_size = None
+        except Exception:
+            pass
+
+    def show_form(self):
+        """Attached quick-add form (replaces the old popup dialog)."""
+        if not self.inline_panel.isVisible():
+            # remember size to restore after add/cancel; grow to fit form
+            self._pre_form_size = self.size()
+        self._show_panel(form=True)
+        self.inline_title.clear()
+        self.inline_title.setFocus()
+        try:
+            QApplication.processEvents()
+            hint = self.sizeHint()
+            self.resize(max(self.width(), self.minimumWidth()), max(self.height(), hint.height()))
+        except Exception:
+            pass
+
+    def _submit_inline_task(self):
+        title = self.inline_title.text().strip()
+        if not title:
+            return
+        try:
+            todo = self.storage.add_todo(title, self.inline_category.currentText())
+        except ValueError:
+            return
+        self._hide_panel()
+        self.set_task(todo["title"], todo["category"], round(self.total_seconds / 60))
+        if self.is_running:
+            self.toggle_timer()  # pause — fresh period for the new task
+        self.task_added.emit(todo)
+
+    def show_notice(self, text: str, actions: list | None = None,
+                    timeout_ms: int = 6000):
+        """Attached notification. actions=[(label, value)]; emits notice_answered."""
+        self._show_panel(form=False)
+        self.notice_label.setText(text)
+        while self.notice_btns.count():
+            item = self.notice_btns.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        if actions:
+            for label, value in actions:
+                btn = QPushButton(label)
+                btn.clicked.connect(lambda _c, v=value: self._answer_notice(v))
+                self.notice_btns.addWidget(btn)
+        else:
+            self._notice_timer.start(timeout_ms)
+
+    def _answer_notice(self, value):
+        self._hide_panel()
+        self.notice_answered.emit(value)
 
     # ---------- designs ----------
     def _make_task_labels(self, time_size: int = 15):
@@ -321,7 +480,7 @@ class FloatingTimerWidget(QWidget):
         add_btn = QPushButton("+")
         add_btn.setFixedSize(34, 34)
         add_btn.setToolTip("Quick add task")
-        add_btn.clicked.connect(self._quick_add_dialog)
+        add_btn.clicked.connect(self.show_form)
 
         break_btn = QPushButton("☕")
         break_btn.setFixedSize(34, 28)
@@ -368,11 +527,11 @@ class FloatingTimerWidget(QWidget):
             _clear_layout(lay)
         else:
             lay = QHBoxLayout(self._float_container)
-        self._float_container.setStyleSheet(self._float_style())
+        self._restyle(self.inline_panel.isVisible() if hasattr(self, "inline_panel") else False)
         self.ring = None
         self.bar = None
         {"pill": self._build_pill, "neon": self._build_neon,
-         "split": self._build_split}[self.design](lay)
+         "split": self._build_split, "retro": self._build_retro}[self.design](lay)
         self._refresh_progress()
 
     def _build_pill(self, layout):
@@ -467,39 +626,135 @@ class FloatingTimerWidget(QWidget):
         right.addLayout(grid)
         layout.addLayout(right, stretch=3)
 
-    def _quick_add_dialog(self):
-        """Quick-add a task from the floating widget (title + category)."""
-        from PyQt6.QtWidgets import QDialog, QDialogButtonBox
-        from core.storage import CATEGORIES as _CATS
-        dlg = QDialog(self)
-        dlg.setWindowTitle("New task")
-        dlg.setMinimumWidth(280)
-        lay = QVBoxLayout(dlg)
-        title_edit = QLineEdit(dlg)
-        title_edit.setPlaceholderText("Task title...")
-        lay.addWidget(title_edit)
-        cat_combo = QComboBox(dlg)
-        cat_combo.addItems(_CATS)
-        lay.addWidget(cat_combo)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, dlg)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-        lay.addWidget(buttons)
-        title_edit.setFocus()
-        if dlg.exec() != QDialog.DialogCode.Accepted:
+    # --- retro typewriter constants ---
+    RETRO_PAPER = "#f2ede0"
+    RETRO_INK = "#2b2b2b"
+    RETRO_RED = "#8e2f25"
+    RETRO_KEYBAR = "#b3392e"
+
+    def _build_retro(self, layout):
+        """D — Typewriter: paper sheet, phase groups, clickable checkboxes."""
+        from datetime import date
+        layout.setContentsMargins(10, 10, 10, 10)
+        self._make_task_labels(time_size=22)
+        # paper sheet
+        sheet = QFrame()
+        sheet.setStyleSheet(
+            f"QFrame {{ background-color: {self.RETRO_PAPER}; "
+            "border-radius: 4px; }}")
+        sv = QVBoxLayout(sheet)
+        sv.setContentsMargins(12, 8, 12, 8)
+        header = QLabel(f"··· {date.today().isoformat()} — RAKEZ DAY ···")
+        header.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
+        header.setStyleSheet(f"color: {self.RETRO_RED};")
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sv.addWidget(header)
+        rule = QFrame()
+        rule.setFixedHeight(2)
+        rule.setStyleSheet(f"background-color: {self.RETRO_RED};")
+        sv.addWidget(rule)
+        # timer strip on the paper
+        strip = QHBoxLayout()
+        self.time_label.setStyleSheet(f"color: {self.RETRO_RED};")
+        strip.addWidget(self.time_label)
+        strip.addWidget(self.task_label, stretch=1)
+        self.task_label.setStyleSheet(f"color: {self.RETRO_INK};")
+        sv.addLayout(strip)
+        # scrollable phase list
+        self.retro_scroll = QScrollArea()
+        self.retro_scroll.setWidgetResizable(True)
+        self.retro_scroll.setStyleSheet(
+            f"QScrollArea {{ background-color: {self.RETRO_PAPER}; border: none; }}")
+        self.retro_list = QWidget()
+        self.retro_list.setStyleSheet(f"background-color: {self.RETRO_PAPER};")
+        self.retro_list_layout = QVBoxLayout(self.retro_list)
+        self.retro_list_layout.setContentsMargins(4, 4, 4, 4)
+        self.retro_list_layout.addStretch()
+        self.retro_scroll.setWidget(self.retro_list)
+        sv.addWidget(self.retro_scroll, stretch=1)
+        self.retro_count = QLabel("")
+        self.retro_count.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
+        self.retro_count.setStyleSheet(f"color: {self.RETRO_RED};")
+        self.retro_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sv.addWidget(self.retro_count)
+        layout.addWidget(sheet, stretch=1)
+        # red typewriter key bar
+        keybar = QFrame()
+        keybar.setStyleSheet(
+            f"QFrame {{ background-color: {self.RETRO_KEYBAR}; border-radius: 10px; }}")
+        kv = QHBoxLayout(keybar)
+        kv.setContentsMargins(10, 6, 10, 6)
+        t, e, a, b, r, q = self._make_buttons()
+        for btn in (t, e, a, b, r, q):
+            btn.setStyleSheet(
+                "QPushButton { background-color: #f2ede0; color: #2b2b2b; "
+                "border: 1px solid #2b2b2b; border-radius: 14px; }"
+                "QPushButton:hover { background-color: #ffffff; }")
+            kv.addWidget(btn)
+        layout.addWidget(keybar)
+        self._refresh_retro_list()
+        # mode/category shown via task line; keep refs valid
+        self.mode_label.setStyleSheet(f"color: {self.RETRO_RED};")
+
+    def _refresh_retro_list(self):
+        """Rebuild phase-grouped checkboxes from storage."""
+        if getattr(self, "retro_list_layout", None) is None:
             return
-        title = title_edit.text().strip()
-        if not title:
+        lay = self.retro_list_layout
+        while lay.count():
+            item = lay.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        todos = self.storage.get_todos()
+        order, groups = [], {}
+        for t in todos:
+            c = t.get("category", "Deep Work")
+            if c not in groups:
+                groups[c] = []
+                order.append(c)
+            groups[c].append(t)
+        n_done = sum(1 for t in todos if t.get("completed"))
+        for cat in order:
+            head = QLabel(f"PHASE: {cat.upper()}")
+            head.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
+            head.setStyleSheet(f"color: {self.RETRO_RED};")
+            lay.addWidget(head)
+            for t in groups[cat]:
+                done = bool(t.get("completed"))
+                box = "☒" if done else "☐"
+                cb = QCheckBox(f"{box}  {t.get('title')}")
+                cb.setFont(QFont("Consolas", 9))
+                cb.setChecked(done)
+                cb.setStyleSheet(
+                    f"QCheckBox {{ color: {self.RETRO_INK}; spacing: 4px; }}")
+                cb.setProperty("todo_id", t.get("id"))
+                cb.toggled.connect(self._toggle_retro_task)
+                lay.addWidget(cb)
+        lay.addStretch()
+        total = len(todos)
+        self.retro_count.setText(f"{n_done}/{total} done" if total else "no tasks yet")
+        self._refresh_progress()
+
+    def _toggle_retro_task(self, checked: bool):
+        box = self.sender()
+        if box is None:
             return
+        todo_id = box.property("todo_id")
         try:
-            todo = self.storage.add_todo(title, cat_combo.currentText())
-        except ValueError:
-            return
-        self.set_task(todo["title"], todo["category"], round(self.total_seconds / 60))
-        if self.is_running:
-            self.toggle_timer()  # pause — fresh period for the new task
-        self.task_added.emit(todo)
+            self.storage.set_completed(todo_id, checked)
+        except Exception:
+            pass
+        todo = None
+        try:
+            for t in self.storage.get_todos():
+                if t.get("id") == todo_id:
+                    todo = t
+                    break
+        except Exception:
+            pass
+        self._refresh_retro_list()
+        if todo is not None:
+            self.task_added.emit(todo)
 
     def _switch_task_menu(self):
         """Popup menu of open tasks — switch without opening the dashboard."""
@@ -534,6 +789,7 @@ class FloatingTimerWidget(QWidget):
         self.total_seconds = duration_min * 60
         self.remaining_seconds = self.total_seconds
         self._update_time_display()
+        self._refresh_retro_list()
 
     def start_break(self, kind="short_break", minutes: int | None = None):
         if minutes is None:
@@ -1151,6 +1407,12 @@ class RakezMainWindow(QMainWindow):
             if QSystemTrayIcon.isSystemTrayAvailable():
                 self.tray = QSystemTrayIcon(self)
                 self.tray.setToolTip("Rakez ركّز")
+                try:
+                    logo = PROJECT_ROOT / "assets" / "icon-256.png"
+                    if logo.exists():
+                        self.tray.setIcon(QIcon(str(logo)))
+                except Exception:
+                    pass
                 menu = QMenu()
                 show_act = QAction("Show Dashboard", self)
                 show_act.triggered.connect(self.show_dashboard)
@@ -1373,22 +1635,54 @@ class RakezMainWindow(QMainWindow):
             except Exception:
                 pass
             self.cycle_label.setText(f"Cycles completed: {self.floating_widget.cycles_done} (long break every 4)")
-            # auto-suggest break
+            # auto-suggest break — attached to the widget, fallback to popup
             minutes = self.break_spin.value() if hasattr(self, "break_spin") else DEFAULTS["short_break"]
             if self.floating_widget.cycles_done % 4 == 0:
                 self.floating_widget.start_break("long_break", DEFAULTS["long_break"])
-                QMessageBox.information(self, "Completed 🎉", f"Focus '{session['task']}' logged! Long break started.")
+                self._widget_or_popup(
+                    f"🎉 Focus '{session['task']}' logged! Long break started.")
             else:
-                reply = QMessageBox.question(self, "Completed 🎉",
-                    f"Session '{session['task']}' recorded! Start {minutes}-min break?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                if reply == QMessageBox.StandardButton.Yes:
-                    self.floating_widget.start_break("short_break", minutes)
+                self._pending_break_min = minutes
+                try:
+                    self.floating_widget.notice_answered.disconnect()
+                except Exception:
+                    pass
+                self.floating_widget.notice_answered.connect(self._on_break_answer)
+                if not self._widget_or_popup(
+                        f"🎉 Session '{session['task']}' recorded! Start {minutes}-min break?",
+                        actions=[("Yes", True), ("No", False)]):
+                    # widget hidden → classic popup already asked; clean up
+                    try:
+                        self.floating_widget.notice_answered.disconnect()
+                    except Exception:
+                        pass
         else:
-            QMessageBox.information(self, "Break over", "Break finished! Ready for next focus?")
+            self._widget_or_popup("☕ Break finished! Ready for next focus?")
         self._load_analytics()
         self._load_todos_list()
         self._refresh_task_dropdown()
+
+    def _widget_or_popup(self, text: str, actions: list | None = None) -> bool:
+        """Show text attached to the floating widget; popup fallback if hidden."""
+        if self.floating_widget.isVisible():
+            self.floating_widget.show_notice(text, actions=actions)
+            return True
+        if actions:
+            reply = QMessageBox.question(self, "Rakez", text,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            self._on_break_answer(reply == QMessageBox.StandardButton.Yes)
+        else:
+            QMessageBox.information(self, "Rakez", text)
+        return False
+
+    def _on_break_answer(self, value):
+        try:
+            self.floating_widget.notice_answered.disconnect()
+        except Exception:
+            pass
+        if value:
+            minutes = getattr(self, "_pending_break_min", DEFAULTS["short_break"])
+            self.floating_widget.start_break("short_break", minutes)
 
     def _plan_morning(self):
         self.coach_output.setPlainText("Hermes is thinking... ⏳")

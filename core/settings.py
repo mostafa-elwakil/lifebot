@@ -32,7 +32,8 @@ ACCENTS = {
 SOUND_NAMES = ["Default beep", "Chime", "Alert", "Silent"]
 
 #: Widget designs.
-DESIGNS = {"Glass Pill": "pill", "Neon Card": "neon", "Split Flip": "split"}
+DESIGNS = {"Glass Pill": "pill", "Neon Card": "neon", "Split Flip": "split",
+           "Typewriter": "retro"}
 
 #: Card background colors.
 BACKGROUNDS = {
@@ -89,7 +90,7 @@ def load_settings(data_dir: str | Path) -> dict:
         cfg["accent"] = DEFAULTS["accent"]
     if cfg.get("sound") not in SOUND_NAMES:
         cfg["sound"] = DEFAULTS["sound"]
-    if cfg.get("design") not in ("pill", "neon", "split"):
+    if cfg.get("design") not in ("pill", "neon", "split", "retro"):
         cfg["design"] = DEFAULTS["design"]
     if not valid_hex(cfg.get("background", "")):
         cfg["background"] = DEFAULTS["background"]
