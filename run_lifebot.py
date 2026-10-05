@@ -253,9 +253,9 @@ class FloatingTimerWidget(QWidget):
         self.background = background if valid_hex(background) else "#1a1b26"
         self._build_design()
 
-    DESIGN_MIN_SIZES = {"pill": (280, 96), "neon": (380, 140), "split": (420, 110),
+    DESIGN_MIN_SIZES = {"pill": (300, 130), "neon": (380, 140), "split": (420, 110),
                         "retro": (340, 420)}
-    DESIGN_DEFAULT_SIZES = {"pill": (370, 104), "neon": (430, 150), "split": (470, 120),
+    DESIGN_DEFAULT_SIZES = {"pill": (390, 150), "neon": (430, 150), "split": (470, 120),
                             "retro": (380, 480)}
 
     def set_design(self, design: str):
@@ -500,13 +500,22 @@ class FloatingTimerWidget(QWidget):
             "QPushButton:hover { background-color: #f7768e; color: #1a1b26; }")
         quit_btn.clicked.connect(self.quit_requested.emit)
 
+        done_btn = QPushButton("✓")
+        done_btn.setFixedSize(34, 28)
+        done_btn.setToolTip("Mark current task as done")
+        done_btn.setStyleSheet(
+            "QPushButton { border-color: #9ece6a; color: #9ece6a; }"
+            "QPushButton:hover { background-color: #9ece6a; color: #1a1b26; }")
+        done_btn.clicked.connect(self._done_current_task)
+
         self.toggle_btn = toggle_btn
         self.expand_btn = expand_btn
         self.add_btn = add_btn
         self.break_btn = break_btn
         self.reset_btn = reset_btn
         self.quit_btn = quit_btn
-        return toggle_btn, expand_btn, add_btn, break_btn, reset_btn, quit_btn
+        self.done_btn = done_btn
+        return toggle_btn, expand_btn, add_btn, break_btn, reset_btn, quit_btn, done_btn
 
     def _make_bar(self, height: int = 8):
         bar = QProgressBar()
@@ -535,38 +544,34 @@ class FloatingTimerWidget(QWidget):
         self._refresh_progress()
 
     def _build_pill(self, layout):
-        """A — Glass Pill: ring + info + time + thin progress line."""
+        """A — Glass Pill: ring + info + time on top, all buttons one bottom row."""
         layout.setContentsMargins(15, 10, 15, 10)
         self._make_task_labels(time_size=15)
+        outer = QVBoxLayout()
+        top = QHBoxLayout()
         self.ring = _RingWidget(color=self.accent)
         self.ring.setValue(self._elapsed_pct())
-        layout.addWidget(self.ring)
+        top.addWidget(self.ring)
 
         info = QVBoxLayout()
         info.addWidget(self.task_label)
         info.addWidget(self.cat_label)
         info.addWidget(self.mode_label)
-        layout.addLayout(info, stretch=3)
+        top.addLayout(info, stretch=3)
 
         mid = QVBoxLayout()
         mid.addWidget(self.time_label, stretch=2)
         self.bar = self._make_bar(height=6)
         mid.addWidget(self.bar)
-        layout.addLayout(mid, stretch=2)
+        top.addLayout(mid, stretch=2)
+        outer.addLayout(top)
 
-        t, e, a, b, r, q = self._make_buttons()
-        btns = QVBoxLayout()
-        row1 = QHBoxLayout()
-        row1.addWidget(t)
-        row1.addWidget(e)
-        row1.addWidget(a)
-        row2 = QHBoxLayout()
-        row2.addWidget(b)
-        row2.addWidget(r)
-        row2.addWidget(q)
-        btns.addLayout(row1)
-        btns.addLayout(row2)
-        layout.addLayout(btns)
+        t, e, a, d, b, r, q = self._make_buttons()
+        bottom = QHBoxLayout()
+        for btn in (t, e, a, d, b, r, q):
+            bottom.addWidget(btn)
+        outer.addLayout(bottom)
+        layout.addLayout(outer)
 
     def _build_neon(self, layout):
         """B — Neon Card: badge + huge time + chunky progress bar."""
@@ -583,11 +588,12 @@ class FloatingTimerWidget(QWidget):
         outer.addLayout(top)
         mid = QHBoxLayout()
         mid.addWidget(self.time_label, stretch=3)
-        t, e, a, b, r, q = self._make_buttons()
+        t, e, a, d, b, r, q = self._make_buttons()
         grid = QGridLayout()
         grid.addWidget(t, 0, 0)
         grid.addWidget(e, 0, 1)
         grid.addWidget(a, 0, 2)
+        grid.addWidget(d, 0, 3)
         grid.addWidget(b, 1, 0)
         grid.addWidget(r, 1, 1)
         grid.addWidget(q, 1, 2)
@@ -615,11 +621,12 @@ class FloatingTimerWidget(QWidget):
         right = QVBoxLayout()
         right.addWidget(self.task_label)
         right.addWidget(self.cat_label)
-        t, e, a, b, r, q = self._make_buttons()
+        t, e, a, d, b, r, q = self._make_buttons()
         grid = QGridLayout()
         grid.addWidget(t, 0, 0)
         grid.addWidget(e, 0, 1)
         grid.addWidget(a, 0, 2)
+        grid.addWidget(d, 0, 3)
         grid.addWidget(b, 1, 0)
         grid.addWidget(r, 1, 1)
         grid.addWidget(q, 1, 2)
@@ -684,8 +691,8 @@ class FloatingTimerWidget(QWidget):
             f"QFrame {{ background-color: {self.RETRO_KEYBAR}; border-radius: 10px; }}")
         kv = QHBoxLayout(keybar)
         kv.setContentsMargins(10, 6, 10, 6)
-        t, e, a, b, r, q = self._make_buttons()
-        for btn in (t, e, a, b, r, q):
+        t, e, a, d, b, r, q = self._make_buttons()
+        for btn in (t, e, a, d, b, r, q):
             btn.setStyleSheet(
                 "QPushButton { background-color: #f2ede0; color: #2b2b2b; "
                 "border: 1px solid #2b2b2b; border-radius: 14px; }"
@@ -755,6 +762,34 @@ class FloatingTimerWidget(QWidget):
         self._refresh_retro_list()
         if todo is not None:
             self.task_added.emit(todo)
+
+    def _done_current_task(self):
+        """Mark the current widget task as done, then auto-advance."""
+        name = (self.current_task or "").strip()
+        if not name or name == "Select a Task":
+            self.show_notice("No task selected — pick one first.")
+            return
+        try:
+            done_ok = self.storage.set_completed(name, True)
+        except Exception:
+            done_ok = False
+        if not done_ok:
+            self.show_notice(f"⚠ Could not complete '{name}'.")
+            return
+        self.show_notice(f"✓ '{name}' completed!")
+        if self.is_running:
+            self.toggle_timer()  # pause — fresh period ahead
+        remaining = [t for t in self.storage.get_todos() if not t.get("completed")]
+        if remaining:
+            nxt = remaining[0]
+            self.set_task(nxt["title"], nxt.get("category", "Deep Work"),
+                          round(self.total_seconds / 60))
+        else:
+            self.set_task("Select a Task", "Deep Work", round(self.total_seconds / 60))
+        try:
+            self.task_added.emit({"title": name, "completed": True})
+        except Exception:
+            pass
 
     def _switch_task_menu(self):
         """Popup menu of open tasks — switch without opening the dashboard."""

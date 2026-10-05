@@ -1,9 +1,9 @@
-; Rakez Windows installer — build with Inno Setup 6 (https://jrsoftware.org/isdl.php)
+﻿; Rakez Windows installer â€” build with Inno Setup 6 (https://jrsoftware.org/isdl.php)
 ;   iscc packaging\Rakez.iss
 ; Requires dist\Rakez.exe built first:  python packaging\build_windows.py
 
 #define MyAppName "Rakez"
-#define MyAppVersion "1.6.0"
+#define MyAppVersion "1.8.0"
 #define MyAppPublisher "Mostafa Elwakil"
 #define MyAppExeName "Rakez.exe"
 
