@@ -255,16 +255,15 @@ class FloatingTimerWidget(QWidget):
 
     DESIGN_MIN_SIZES = {"pill": (300, 130), "neon": (380, 140), "split": (420, 110),
                         "retro": (340, 420)}
-    DESIGN_DEFAULT_SIZES = {"pill": (390, 150), "neon": (430, 150), "split": (470, 120),
-                            "retro": (380, 480)}
 
     def set_design(self, design: str):
         self.design = design if design in ("pill", "neon", "split", "retro") else "pill"
-        self._build_design()
         mw, mh = self.DESIGN_MIN_SIZES[self.design]
         self.setMinimumSize(mw, mh)
-        w, h = self.DESIGN_DEFAULT_SIZES[self.design]
-        self.resize(max(mw, w), max(mh, h))
+        # keep the user's size — only clamp up if below the new minimums
+        # (never jump back to defaults; Save must not reset the size)
+        if self.width() < mw or self.height() < mh:
+            self.resize(max(mw, self.width()), max(mh, self.height()))
         self._build_design()
 
     def set_size(self, w: int, h: int):
@@ -1390,10 +1389,10 @@ class RakezMainWindow(QMainWindow):
         self.gsync._cal = self.gsync._tasks = None
         self.google_status_label.setText(f"Google: {self.gsync.status()}")
         self.floating_widget.set_accent(s["accent"])
-        self.floating_widget.set_size(s["widget_w"], s["widget_h"])
         self.floating_widget.set_sound(s["sound"])
         self.floating_widget.set_design(s["design"])
         self.floating_widget.set_background(s["background"])
+        self.floating_widget.set_size(s["widget_w"], s["widget_h"])
         self.floating_widget.set_opacity(s["opacity"])
         self.opacity_spin.blockSignals(True)
         self.opacity_spin.setValue(int(s["opacity"]))

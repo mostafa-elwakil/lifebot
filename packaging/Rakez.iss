@@ -3,7 +3,7 @@
 ; Requires dist\Rakez.exe built first:  python packaging\build_windows.py
 
 #define MyAppName "Rakez"
-#define MyAppVersion "1.8.0"
+#define MyAppVersion "1.9.0"
 #define MyAppPublisher "Mostafa Elwakil"
 #define MyAppExeName "Rakez.exe"
 
