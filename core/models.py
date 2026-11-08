@@ -14,6 +14,7 @@ class Todo:
     priority: str = "medium"  # low / medium / high
     estimate_pomodoros: int = 1
     done_pomodoros: int = 0
+    project_id: str = ""  # "" = no project
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
     def to_dict(self) -> dict:
@@ -36,6 +37,7 @@ class Todo:
             priority=d.get("priority", "medium"),
             estimate_pomodoros=Todo._to_int(d.get("estimate_pomodoros", 1), 1),
             done_pomodoros=Todo._to_int(d.get("done_pomodoros", 0), 0),
+            project_id=str(d.get("project_id") or "").strip(),
             created_at=d.get("created_at") or datetime.now().isoformat(),
         )
 

@@ -4,6 +4,7 @@ import functools
 import json
 import sqlite3
 import threading
+import uuid
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -56,14 +57,24 @@ class SqliteStorage:
             id TEXT PRIMARY KEY, title TEXT NOT NULL, category TEXT DEFAULT 'Deep Work',
             completed INTEGER DEFAULT 0, priority TEXT DEFAULT 'medium',
             estimate_pomodoros INTEGER DEFAULT 1, done_pomodoros INTEGER DEFAULT 0,
-            created_at TEXT
+            project_id TEXT DEFAULT '', created_at TEXT
         )""")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS sessions(
             id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT, category TEXT,
             duration_min INTEGER, kind TEXT DEFAULT 'focus', timestamp TEXT
         )""")
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS projects(
+            id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, created_at TEXT
+        )""")
         self._conn.commit()
+        # old DBs: add the project_id column if missing
+        try:
+            self._conn.execute("ALTER TABLE todos ADD COLUMN project_id TEXT DEFAULT ''")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
     def _migrate_json_once(self):
         cur = self._conn.cursor()
@@ -97,7 +108,7 @@ class SqliteStorage:
 
     _INSERT_SQL = (
         "INSERT OR REPLACE INTO todos(id,title,category,completed,priority,"
-        "estimate_pomodoros,done_pomodoros,created_at) VALUES(?,?,?,?,?,?,?,?)"
+        "estimate_pomodoros,done_pomodoros,project_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)"
     )
 
     @_locked
@@ -105,7 +116,7 @@ class SqliteStorage:
         self._conn.execute(
             self._INSERT_SQL,
             (todo.id, todo.title, todo.category, int(todo.completed), todo.priority,
-             todo.estimate_pomodoros, todo.done_pomodoros, todo.created_at),
+             todo.estimate_pomodoros, todo.done_pomodoros, todo.project_id, todo.created_at),
         )
         if commit:
             self._conn.commit()
@@ -128,17 +139,17 @@ class SqliteStorage:
                     self._INSERT_SQL,
                     (todo.id, todo.title, todo.category, int(todo.completed),
                      todo.priority, todo.estimate_pomodoros, todo.done_pomodoros,
-                     todo.created_at),
+                     todo.project_id, todo.created_at),
                 )
 
     @_locked
     def add_todo(self, title: str, category: str = "Deep Work", priority: str = "medium",
-                 estimate: int = 1) -> dict:
+                 estimate: int = 1, project_id: str = "") -> dict:
         title = (title or "").strip()
         if not title:
             raise ValueError("task title must not be empty")
         todo = Todo(title=title, category=category, priority=priority,
-                    estimate_pomodoros=estimate)
+                    estimate_pomodoros=estimate, project_id=project_id)
         self._insert_todo(todo)
         return todo.to_dict()
 
@@ -200,7 +211,7 @@ class SqliteStorage:
     @_locked
     def update_todo(self, todo_id_or_title: str, fields: dict) -> dict | None:
         """Update whitelisted fields; returns the updated todo or None."""
-        allowed = {"title", "category", "priority", "completed"}
+        allowed = {"title", "category", "priority", "completed", "project_id"}
         row = self.get_todo(todo_id_or_title)
         if row is None:
             return None
@@ -208,6 +219,14 @@ class SqliteStorage:
         for k, v in fields.items():
             if k not in allowed:
                 continue
+            if k == "project_id":
+                v = str(v or "").strip()
+                if v and self.get_project(v) is None:
+                    # also accept a project name
+                    by_name = self.get_project_by_name(v)
+                    if by_name is None:
+                        raise ValueError(f"project '{v}' not found")
+                    v = by_name["id"]
             sets.append(f"{k}=?")
             vals.append(int(bool(v)) if k == "completed" else v)
         if sets:
@@ -246,6 +265,80 @@ class SqliteStorage:
             return {"added": added, "skipped": skipped}
         except Exception:
             return {"added": 0, "skipped": 0}
+
+    # --- projects (grouping of tasks with progress %) ---
+    @_locked
+    def create_project(self, name: str) -> dict:
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("project name must not be empty")
+        if self.get_project_by_name(name):
+            raise ValueError(f"project '{name}' already exists")
+        pid = uuid.uuid4().hex[:8]
+        created = {"id": pid, "name": name, "created_at": datetime.now().isoformat()}
+        self._conn.execute(
+            "INSERT INTO projects(id,name,created_at) VALUES(?,?,?)",
+            (pid, name, created["created_at"]))
+        self._conn.commit()
+        created.update(total=0, done=0, pct=0)
+        return created
+
+    @_locked
+    def get_project_by_name(self, name: str) -> dict | None:
+        name = (name or "").strip().lower()
+        if not name:
+            return None
+        cur = self._conn.cursor()
+        cur.execute("SELECT id FROM projects WHERE lower(name)=?", (name,))
+        row = cur.fetchone()
+        return self.get_project(row["id"]) if row else None
+
+    @_locked
+    def get_project(self, project_id: str) -> dict | None:
+        cur = self._conn.cursor()
+        cur.execute("SELECT * FROM projects WHERE id=?", (project_id,))
+        row = cur.fetchone()
+        if row is None:
+            return None
+        p = dict(row)
+        cur.execute(
+            "SELECT COUNT(*) AS total, SUM(completed) AS done "
+            "FROM todos WHERE project_id=?", (project_id,))
+        s = cur.fetchone()
+        total = int(s["total"] or 0)
+        done = int(s["done"] or 0)
+        p.update(total=total, done=done,
+                 pct=round(done / total * 100) if total else 0)
+        return p
+
+    @_locked
+    def get_projects(self) -> list[dict]:
+        cur = self._conn.cursor()
+        cur.execute("SELECT id FROM projects ORDER BY created_at")
+        return [self.get_project(r["id"]) for r in cur.fetchall()]
+
+    @_locked
+    def delete_project(self, project_id_or_name: str) -> bool:
+        """Delete a project; its tasks stay but become unassigned."""
+        cur = self._conn.cursor()
+        cur.execute("SELECT id FROM projects WHERE id=? OR name=?",
+                    (project_id_or_name, project_id_or_name))
+        row = cur.fetchone()
+        if row is None:
+            return False
+        self._conn.execute("UPDATE todos SET project_id='' WHERE project_id=?",
+                           (row["id"],))
+        self._conn.execute("DELETE FROM projects WHERE id=?", (row["id"],))
+        self._conn.commit()
+        return True
+
+    @_locked
+    def get_project_todos(self, project_id: str) -> list[dict]:
+        """Tasks of one project, open first then oldest."""
+        cur = self._conn.cursor()
+        cur.execute("SELECT * FROM todos WHERE project_id=? ORDER BY completed, created_at",
+                    (project_id,))
+        return [dict(r) | {"completed": bool(r["completed"])} for r in cur.fetchall()]
 
     # --- stats ---
     @_locked

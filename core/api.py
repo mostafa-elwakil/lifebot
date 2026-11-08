@@ -3,9 +3,12 @@
 Endpoints (JSON):
     GET  /health
     GET  /tasks            -> {"tasks": [...]}
-    POST /tasks            {"title": str, "category"?, "priority"?, "estimate"?}
-    PUT  /tasks/<id-or-title>   {"completed"?, "title"?, "category"?, "priority"?}
+    POST /tasks            {"title": str, "category"?, "priority"?, "estimate"?, "project_id"?}
+    PUT  /tasks/<id-or-title>   {"completed"?, "title"?, "category"?, "priority"?, "project_id"?}
     DELETE /tasks/<id-or-title>
+    GET  /projects         -> {"projects": [...]} (each with total/done/pct)
+    POST /projects         {"name": str}
+    DELETE /projects/<id-or-name>   (tasks survive, become unassigned)
     GET  /sessions         -> {"sessions": [...]}
     POST /sessions         {"task": str, "category"?, "duration_min"?, "kind"?}
     GET  /stats?days=7
@@ -26,6 +29,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 from .storage import SqliteStorage
 
 API_TOKEN_ENV = "API_TOKEN"
+PROJECT_PLACEHOLDER = "_NO_PROJECT_"  # route-safe placeholder for "no project"
 
 
 def _expected_token() -> str:
@@ -94,13 +98,18 @@ class ApiHandler(BaseHTTPRequestHandler):
                         data.get("category", "Deep Work"),
                         priority=data.get("priority", "medium"),
                         estimate=int(data.get("estimate", 1)),
+                        project_id=str(data.get("project_id") or ""),
                     )
                 except (ValueError, TypeError) as e:
                     self._send(400, {"error": str(e)[:200]})
                     return
                 self._send(201, todo)
             elif method == "PUT" and len(parts) == 2 and parts[0] == "tasks":
-                updated = self.store.update_todo(parts[1], self._read_json())
+                try:
+                    updated = self.store.update_todo(parts[1], self._read_json())
+                except ValueError as e:
+                    self._send(400, {"error": str(e)[:200]})
+                    return
                 if updated is None:
                     self._send(404, {"error": "not found"})
                 else:
@@ -110,6 +119,37 @@ class ApiHandler(BaseHTTPRequestHandler):
                     self._send(200, {"deleted": True})
                 else:
                     self._send(404, {"error": "not found"})
+            elif method == "GET" and parts == ["projects"]:
+                self._send(200, {"projects": self.store.get_projects()})
+            elif method == "POST" and parts == ["projects"]:
+                data = self._read_json()
+                try:
+                    self.store.create_project(data.get("name", ""))
+                except ValueError as e:
+                    self._send(400, {"error": str(e)[:200]})
+                    return
+                self._send(201, {"created": True})
+            elif method == "DELETE" and len(parts) == 2 and parts[0] == "projects":
+                p = (self.store.get_project(parts[1])
+                     or self.store.get_project_by_name(parts[1]))
+                if p is None:
+                    self._send(404, {"error": "not found"})
+                elif self.store.delete_project(p["id"]):
+                    self._send(200, {"deleted": True})
+                else:
+                    self._send(404, {"error": "not found"})
+            elif method == "GET" and len(parts) == 3 and parts[0] == "projects" \
+                    and parts[2] == "tasks":
+                target = None
+                if parts[1] != PROJECT_PLACEHOLDER:
+                    p = (self.store.get_project(parts[1])
+                         or self.store.get_project_by_name(parts[1]))
+                    target = p["id"] if p else None
+                if target:
+                    todos = self.store.get_project_todos(target)
+                else:
+                    todos = [t for t in self.store.get_todos() if not t.get("project_id")]
+                self._send(200, {"tasks": todos})
             elif method == "GET" and parts == ["sessions"]:
                 self._send(200, {"sessions": self.store.get_sessions()})
             elif method == "POST" and parts == ["sessions"]:

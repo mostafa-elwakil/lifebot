@@ -398,3 +398,67 @@ def test_joplin_create_never_crashes(monkeypatch):
     assert c.create_todo("x", folder_name="Lifebot") is None
     # no token
     assert JoplinClient(token="").create_todo("x", folder_name="Lifebot") is None
+
+
+def test_version_parsing_and_compare():
+    from core.updater import parse_version, is_newer
+    assert parse_version("v1.9.0") == (1, 9, 0)
+    assert parse_version("1.10.0") == (1, 10, 0)
+    assert parse_version("release-2.0.1-beta") == (2, 0, 1)
+    assert parse_version("garbage") == ()
+    assert is_newer("v1.10.0", "1.9.0")
+    assert is_newer("2.0", "1.9.9")
+    assert not is_newer("1.9.0", "1.9.0")
+    assert not is_newer("1.8.0", "1.9.0")
+    assert not is_newer("garbage", "1.9.0")
+
+
+def test_check_latest_release(monkeypatch):
+    import core.updater as up
+    import requests as _rq
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"tag_name": "v2.0.0", "html_url": "https://github.com/x/releases/tag/v2.0.0"}
+
+    monkeypatch.setattr(up.requests, "get", lambda *a, **k: Resp())
+    info = up.check_latest("1.9.0")
+    assert info["ok"] and info["update_available"] and info["latest"] == "2.0.0"
+    info = up.check_latest("2.0.0")
+    assert info["ok"] and not info["update_available"]
+
+
+def test_check_latest_tags_fallback(monkeypatch):
+    """No formal release (HTTP 404) → falls back to the newest tag."""
+    import core.updater as up
+
+    class Resp404:
+        status_code = 404
+        def json(self):
+            return {"message": "Not Found"}
+
+    class RespTags:
+        status_code = 200
+        def json(self):
+            return [{"name": "v1.3.0"}, {"name": "v1.10.0"}, {"name": "v1.2"}]
+
+    calls = []
+    def fake_get(url, *a, **k):
+        calls.append(url)
+        return Resp404() if "releases/latest" in url else RespTags()
+    monkeypatch.setattr(up.requests, "get", fake_get)
+    info = up.check_latest("1.9.0")
+    assert info["ok"] and info["update_available"] and info["latest"] == "1.10.0"
+    assert "releases/latest" in calls[0]
+
+
+def test_check_latest_never_crashes(monkeypatch):
+    import core.updater as up
+
+    def boom(*a, **k):
+        raise ConnectionError("getaddrinfo failed")
+    monkeypatch.setattr(up.requests, "get", boom)
+    info = up.check_latest("1.9.0")
+    assert not info["ok"] and not info["update_available"] and info["error"]
+    assert "No internet" in info["error"] or "error" in info["error"].lower()

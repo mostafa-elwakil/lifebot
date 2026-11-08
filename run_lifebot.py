@@ -8,8 +8,9 @@ try:
 except Exception:
     pass
 
-from PyQt6.QtCore import Qt, QPoint, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QCursor, QPainter, QPen
+from PyQt6.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QCursor, QPainter, QPen, QDesktopServices
+from PyQt6.QtCore import QUrl
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QTabWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QLineEdit, QTextEdit,
@@ -25,6 +26,7 @@ from core.joplin import JoplinClient, DEFAULT_FOLDER as JOPLIN_DEFAULT_FOLDER
 from core.settings import load_settings, save_settings, ACCENTS, DEFAULTS as SETTINGS_DEFAULTS
 from core.settings import SOUND_NAMES, DESIGNS, BACKGROUNDS, valid_hex
 from core.google_sync import GoogleSync
+from core import updater
 
 import yaml
 
@@ -92,6 +94,18 @@ def play_done_sound(app: QApplication | None = None, sound: str = "Default beep"
             app.beep()
     except Exception:
         pass
+
+
+class _UpdateChecker(QThread):
+    """Background version check so the GUI never blocks on the network."""
+    checked = pyqtSignal(dict)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current = updater.APP_VERSION
+
+    def run(self):
+        self.checked.emit(updater.check_latest(self.current))
 
 
 class _RingWidget(QWidget):
@@ -1070,6 +1084,22 @@ class RakezMainWindow(QMainWindow):
         layout.addWidget(self.todos_list)
         self._load_todos_list()
 
+        proj_row = QHBoxLayout()
+        proj_add_btn = QPushButton("📁 New Project")
+        proj_add_btn.setToolTip("Create a project, then add tasks to it")
+        proj_add_btn.clicked.connect(self._add_project)
+        proj_del_btn = QPushButton("🗑 Delete Project")
+        proj_del_btn.setToolTip("Deletes the selected project header (tasks become unassigned)")
+        proj_del_btn.clicked.connect(self._delete_project)
+        proj_move_btn = QPushButton("📁 Move to Project")
+        proj_move_btn.setToolTip("Assign the selected task to a project")
+        proj_move_btn.clicked.connect(self._move_selected_to_project)
+        proj_row.addWidget(proj_add_btn)
+        proj_row.addWidget(proj_del_btn)
+        proj_row.addWidget(proj_move_btn)
+        proj_row.addStretch()
+        layout.addLayout(proj_row)
+
         add_layout = QHBoxLayout()
         self.new_task_input = QLineEdit()
         self.new_task_input.setPlaceholderText("New task title... (Enter to add)")
@@ -1079,10 +1109,12 @@ class RakezMainWindow(QMainWindow):
         self.priority_combo = QComboBox()
         self.priority_combo.addItems(["low", "medium", "high"])
         self.priority_combo.setCurrentText("medium")
+        self.project_combo = QComboBox()
         add_btn = QPushButton("➕ Add")
         add_btn.clicked.connect(self._add_task)
 
         add_layout.addWidget(self.new_task_input, stretch=3)
+        add_layout.addWidget(self.project_combo, stretch=1)
         add_layout.addWidget(self.category_combo, stretch=1)
         add_layout.addWidget(self.priority_combo, stretch=1)
         add_layout.addWidget(add_btn, stretch=1)
@@ -1309,6 +1341,24 @@ class RakezMainWindow(QMainWindow):
         grow.addWidget(auth_btn)
         layout.addLayout(grow)
 
+        # --- update check ---
+        layout.addWidget(QLabel("⬆️ Updates:"))
+        upd_row = QHBoxLayout()
+        self.update_btn = QPushButton("🔄 Check for updates")
+        self.update_btn.setToolTip("Compare this version against the latest GitHub release")
+        self.update_btn.clicked.connect(self._check_for_updates)
+        upd_row.addWidget(self.update_btn)
+        self.update_open_btn = QPushButton("🌐 Open releases page")
+        self.update_open_btn.setVisible(False)
+        self.update_open_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(getattr(self, "_update_url", updater.RELEASES_URL))))
+        upd_row.addWidget(self.update_open_btn)
+        self.update_label = QLabel(f"Current version: {updater.APP_VERSION}")
+        self.update_label.setFont(QFont("Segoe UI", 8))
+        self.update_label.setStyleSheet("color: #565f89;")
+        upd_row.addWidget(self.update_label, stretch=1)
+        layout.addLayout(upd_row)
+
         save_btn = QPushButton("💾 Save settings")
         save_btn.setStyleSheet("background-color: #9ece6a; color: #1a1b26; font-size: 13px; padding: 10px;")
         save_btn.clicked.connect(self._save_settings)
@@ -1356,6 +1406,43 @@ class RakezMainWindow(QMainWindow):
 
     def _test_sound(self):
         play_done_sound(QApplication.instance(), self.sound_combo.currentText())
+
+    # ---- update check ----
+    def _check_for_updates(self, silent: bool = False):
+        """Check GitHub for a newer version (background thread)."""
+        if getattr(self, "_update_worker", None) is not None and self._update_worker.isRunning():
+            return
+        self._update_silent = silent
+        self.update_btn.setEnabled(False)
+        self.update_btn.setText("⏳ Checking...")
+        self.update_label.setText("Checking GitHub for updates...")
+        self._update_worker = _UpdateChecker(self)
+        self._update_worker.checked.connect(self._on_update_checked)
+        self._update_worker.start()
+
+    def _on_update_checked(self, info: dict):
+        self.update_btn.setEnabled(True)
+        self.update_btn.setText("🔄 Check for updates")
+        cur = info.get("current", updater.APP_VERSION)
+        if not info.get("ok"):
+            msg = info.get("error") or "Unknown error"
+            self.update_label.setText(f"⚠ Update check failed: {msg}")
+            self.update_label.setStyleSheet("color: #e0af68;")
+            return
+        latest = info.get("latest") or cur
+        self._update_url = info.get("url", updater.RELEASES_URL)
+        if info.get("update_available"):
+            self.update_label.setText(f"🆕 New version available: {latest} (you have {cur})")
+            self.update_label.setStyleSheet("color: #9ece6a; font-weight: bold;")
+            self.update_open_btn.setVisible(True)
+            self._notify("Rakez", f"New version {latest} available! Open the releases page to download.")
+        else:
+            self.update_label.setText(f"✓ Up to date — {cur} is the latest release")
+            self.update_label.setStyleSheet("color: #565f89;")
+            self.update_open_btn.setVisible(False)
+            if not getattr(self, "_update_silent", False):
+                QMessageBox.information(self, "Updates",
+                                        f"You are on the latest version ({cur}).")
 
     def _save_settings(self):
         s = self.app_settings
@@ -1524,25 +1611,132 @@ class RakezMainWindow(QMainWindow):
         if not item:
             return None
         data = item.data(Qt.ItemDataRole.UserRole)
-        return data.get("id") if isinstance(data, dict) else None
+        if not isinstance(data, dict) or data.get("header"):
+            return None
+        return data.get("id")
+
+    def _selected_project_id(self) -> str | None:
+        """Project id when a project header row is selected."""
+        item = self.todos_list.currentItem()
+        if not item:
+            return None
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if isinstance(data, dict) and data.get("header"):
+            return data.get("id")
+        return None
+
+    def _refresh_project_combo(self):
+        """(No project) + every project name in the add-task combo."""
+        cur = getattr(self, "project_combo", None)
+        if cur is None:
+            return
+        cur.blockSignals(True)
+        cur.clear()
+        cur.addItem("📁 (No project)", "")
+        for p in self.storage.get_projects():
+            cur.addItem(f"📁 {p['name']}", p["id"])
+        cur.blockSignals(False)
 
     def _load_todos_list(self):
         show_done = self.show_done_check.isChecked() if hasattr(self, "show_done_check") else False
+        self._refresh_project_combo()
         self.todos_list.clear()
-        for t in self.storage.get_todos():
+        todos = self.storage.get_todos()
+
+        def make_item(text: str, data) -> QListWidgetItem:
+            item = QListWidgetItem(text)
+            item.setData(Qt.ItemDataRole.UserRole, data)
+            return item
+
+        def add_task(t):
             if t.get("completed") and not show_done:
-                continue
+                return
             st = "✓" if t.get("completed") else "○"
-            item = QListWidgetItem(f"[{st}] {t.get('title')} ({t.get('category')}) [{t.get('priority','medium')}] 🍅{t.get('done_pomodoros',0)}/{t.get('estimate_pomodoros',1)}")
-            item.setData(Qt.ItemDataRole.UserRole, t)
+            item = make_item(
+                f"    [{st}] {t.get('title')} ({t.get('category')}) "
+                f"[{t.get('priority','medium')}] 🍅{t.get('done_pomodoros',0)}/{t.get('estimate_pomodoros',1)}", t)
             self.todos_list.addItem(item)
+
+        # open projects first (in creation order), then ungrouped tasks
+        grouped = {t.get("project_id", "") for t in todos}
+        for p in self.storage.get_projects():
+            if p["id"] in grouped:
+                item = make_item(
+                    f"📁 {p['name']} — {p['done']}/{p['total']} ({p['pct']}%)",
+                    {"id": p["id"], "name": p["name"], "header": True})
+                f = item.font()
+                f.setBold(True)
+                item.setFont(f)
+                self.todos_list.addItem(item)
+            for t in self.storage.get_project_todos(p["id"]):
+                add_task(t)
+        has_unassigned = any(t.get("project_id", "") == "" for t in todos)
+        if has_unassigned:
+            cnt = sum(1 for t in todos if not t.get("project_id") and not t.get("completed"))
+            item = make_item(f"📂 Ungrouped — {cnt} open", None)
+            f = item.font()
+            f.setBold(True)
+            item.setFont(f)
+            self.todos_list.addItem(item)
+            for t in todos:
+                if not t.get("project_id", ""):
+                    add_task(t)
+
+    def _add_project(self):
+        name, ok = QInputDialog.getText(self, "New Project", "Project name:")
+        if not (ok and (name or "").strip()):
+            return
+        try:
+            p = self.storage.create_project(name)
+        except ValueError as e:
+            QMessageBox.warning(self, "New Project", str(e))
+            return
+        self._load_todos_list()
+
+    def _delete_project(self):
+        pid = self._selected_project_id()
+        if not pid:
+            QMessageBox.information(self, "Delete Project",
+                                    "Select a project header row first (📁 row).")
+            return
+        p = self.storage.get_project(pid)
+        if p and QMessageBox.question(
+                self, "Delete Project",
+                f"Delete project '{p['name']}'?\nIts tasks stay but become ungrouped.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        ) == QMessageBox.StandardButton.Yes:
+            self.storage.delete_project(p["id"])
+            self._load_todos_list()
+
+    def _move_selected_to_project(self):
+        key = self._selected_todo_key()
+        if not key:
+            QMessageBox.information(self, "Move to Project",
+                                    "Select a task row first (not a project header).")
+            return
+        projects = self.storage.get_projects()
+        names = [p["name"] for p in projects]
+        name, ok = QInputDialog.getItem(
+            self, "Move to Project", "Choose project (it stays selected after):",
+            names, 0, True)  # editable → type a new project name
+        if not (ok and (name or "").strip()):
+            return
+        try:
+            self.storage.update_todo(key, {"project_id": name.strip()})
+        except ValueError as e:
+            QMessageBox.warning(self, "Move to Project", str(e))
+        self._load_todos_list()
+        self._refresh_task_dropdown()
 
     def _add_task(self):
         t = self.new_task_input.text().strip()
         c = self.category_combo.currentText()
         p = self.priority_combo.currentText()
+        pid = ""
+        if hasattr(self, "project_combo"):
+            pid = self.project_combo.currentData() or ""
         if t:
-            self.storage.add_todo(t, c, priority=p)
+            self.storage.add_todo(t, c, priority=p, project_id=pid)
             # إضافة المهمة لـ Joplin تلقائياً — must never crash the GUI
             try:
                 created = self.joplin.create_todo(title=t, body=f"Category: {c}\nPriority: {p}",
@@ -1785,6 +1979,8 @@ def main():
     # Deferred so the window paints first; network runs after event loop
     # starts instead of blocking startup.
     QTimer.singleShot(800, lambda: _safe_startup_pull(window))
+    # silent update check right after the Joplin pull (network already warm)
+    QTimer.singleShot(2000, lambda: _safe_update_check(window))
 
     window.floating_widget.show()
     window.floating_widget.move(120, 120)
@@ -1796,6 +1992,13 @@ def main():
 def _safe_startup_pull(window):
     try:
         window._pull_from_joplin(silent=True)
+    except Exception:
+        pass
+
+
+def _safe_update_check(window):
+    try:
+        window._check_for_updates(silent=True)
     except Exception:
         pass
 

@@ -23,7 +23,8 @@ def _store() -> SqliteStorage:
 
 
 @app.command()
-def add(title: str, category: str = "Deep Work", priority: str = "medium", estimate: int = 1):
+def add(title: str, category: str = "Deep Work", priority: str = "medium", estimate: int = 1,
+        project: str = typer.Option("", "--project", "-p", help="Project name (created if new)")):
     """Add a task."""
     if not (title or "").strip():
         console.print("[red]Title must not be empty[/red]")
@@ -32,8 +33,53 @@ def add(title: str, category: str = "Deep Work", priority: str = "medium", estim
         console.print("[red]Estimate must be >= 1[/red]")
         raise typer.Exit(1)
     s = _store()
-    t = s.add_todo(title, category, priority, estimate)
-    console.print(f"[green]Added:[/green] {t['title']} [{t['category']}] (id={t['id']})")
+    pid = ""
+    if (project or "").strip():
+        proj = s.get_project_by_name(project)
+        if proj is None:
+            try:
+                proj = s.create_project(project)
+            except ValueError as e:
+                console.print(f"[red]{e}[/red]")
+                raise typer.Exit(1)
+        pid = proj["id"]
+    t = s.add_todo(title, category, priority, estimate, project_id=pid)
+    label = f" [{proj['name']}]" if proj else ""
+    console.print(f"[green]Added:[/green] {t['title']}{label} [{t['category']}] (id={t['id']})")
+
+
+@app.command()
+def projects():
+    """List projects with progress."""
+    s = _store()
+    table = Table(title="Rakez Projects")
+    table.add_column("ID"); table.add_column("Name"); table.add_column("Progress")
+    table.add_column("Tasks"); table.add_column("%")
+    for p in s.get_projects():
+        table.add_row(p["id"], p["name"], f"{p['done']}/{p['total']}", "", f"{p['pct']}%")
+    console.print(table)
+
+
+@app.command()
+def assign(key: str, project: str):
+    """Move a task (id or title) into a project (creates it if new)."""
+    s = _store()
+    proj = s.get_project_by_name(project)
+    if proj is None:
+        try:
+            proj = s.create_project(project)
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+    try:
+        updated = s.update_todo(key, {"project_id": proj["id"]})
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    if updated is None:
+        console.print("[red]Task not found[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]Assigned:[/green] {updated['title']} → {proj['name']}")
 
 
 @app.command(name="list")
