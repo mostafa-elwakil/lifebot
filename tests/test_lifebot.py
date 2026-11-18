@@ -462,3 +462,111 @@ def test_check_latest_never_crashes(monkeypatch):
     info = up.check_latest("1.9.0")
     assert not info["ok"] and not info["update_available"] and info["error"]
     assert "No internet" in info["error"] or "error" in info["error"].lower()
+
+
+def test_check_latest_exposes_installer_asset(monkeypatch):
+    import core.updater as up
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {
+                "tag_name": "v2.0.4",
+                "html_url": "https://github.com/x/releases/tag/v2.0.4",
+                "assets": [
+                    {"name": "notes.txt", "size": 10,
+                     "browser_download_url": "https://x/notes.txt"},
+                    {"name": "Rakez.exe", "size": 20,
+                     "browser_download_url": "https://x/Rakez.exe"},
+                    {"name": "Rakez-Setup-2.0.4.exe", "size": 133000000,
+                     "browser_download_url": "https://x/Rakez-Setup-2.0.4.exe"},
+                ],
+            }
+
+    monkeypatch.setattr(up.requests, "get", lambda *a, **k: Resp())
+    info = up.check_latest("2.0.3")
+    assert info["update_available"]
+    assert info["asset_name"] == "Rakez-Setup-2.0.4.exe"  # setup wins over plain exe
+    assert info["asset_url"].endswith("Rakez-Setup-2.0.4.exe")
+    assert info["asset_size"] == 133000000
+
+
+def test_check_latest_without_assets(monkeypatch):
+    import core.updater as up
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"tag_name": "v2.0.4", "assets": []}
+
+    monkeypatch.setattr(up.requests, "get", lambda *a, **k: Resp())
+    info = up.check_latest("2.0.3")
+    assert info["update_available"] and info["asset_url"] == ""
+
+
+class _FakeDownload:
+    def __init__(self, chunks, total=None):
+        self._chunks = chunks
+        self.headers = {"Content-Length": str(total if total is not None else sum(map(len, chunks)))}
+        self.status_code = 200
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size=0):
+        yield from self._chunks
+
+
+def test_download_installer_streams_and_reports_progress(monkeypatch, tmp_path):
+    import core.updater as up
+
+    chunks = [b"abc", b"def", b"ghi"]
+    monkeypatch.setattr(up.requests, "get",
+                        lambda *a, **k: _FakeDownload(chunks))
+    seen = []
+    res = up.download_installer("https://x/Rakez-Setup-2.0.4.exe", tmp_path,
+                                progress=lambda pct, done, total: seen.append(pct))
+    assert res["ok"] is True
+    assert Path(res["path"]).read_bytes() == b"abcdefghi"
+    assert Path(res["path"]).name == "Rakez-Setup-2.0.4.exe"
+    assert seen[-1] == 100
+    # no .part leftovers
+    assert not list(tmp_path.glob("*.part"))
+
+
+def test_download_installer_errors_are_friendly(monkeypatch, tmp_path):
+    import core.updater as up
+
+    class Boom(_FakeDownload):
+        def raise_for_status(self):
+            raise RuntimeError("404 Client Error: Not Found")
+
+    monkeypatch.setattr(up.requests, "get", lambda *a, **k: Boom([b"x"]))
+    res = up.download_installer("https://x/missing.exe", tmp_path)
+    assert res["ok"] is False and "404" in res["error"]
+    # empty url (release without installer) must not attempt a download
+    res2 = up.download_installer("", tmp_path)
+    assert res2["ok"] is False and "installer" in res2["error"].lower()
+
+
+def test_download_cleanup_keeps_current_file(tmp_path):
+    import core.updater as up
+    keep = tmp_path / "Rakez-Setup-2.0.4.exe"
+    keep.write_bytes(b"new")
+    old = tmp_path / "Rakez-Setup-2.0.3.exe"
+    old.write_bytes(b"old")
+    part = tmp_path / "Rakez-Setup-2.0.5.exe.part"
+    part.write_bytes(b"partial")
+    up.cleanup_downloads(tmp_path, keep=str(keep))
+    assert keep.exists() and not old.exists() and not part.exists()
+
+
+def test_run_installer_missing_file_is_safe(tmp_path):
+    import core.updater as up
+    assert up.run_installer(tmp_path / "nope.exe") is False

@@ -1,5 +1,6 @@
 ﻿import sys
 import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -9,8 +10,7 @@ except Exception:
     pass
 
 from PyQt6.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QCursor, QPainter, QPen, QDesktopServices
-from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QCursor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QTabWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QLineEdit, QTextEdit,
@@ -106,6 +106,26 @@ class _UpdateChecker(QThread):
 
     def run(self):
         self.checked.emit(updater.check_latest(self.current))
+
+
+class _UpdateDownloader(QThread):
+    """Background installer download with progress so the GUI stays responsive."""
+    progress = pyqtSignal(int)
+    done = pyqtSignal(dict)
+
+    def __init__(self, url: str, filename: str = "", parent=None):
+        super().__init__(parent)
+        self.url = url
+        self.filename = filename
+        self.dest = Path(tempfile.gettempdir()) / "Rakez-Update"
+
+    def run(self):
+        res = updater.download_installer(
+            self.url, self.dest, filename=self.filename,
+            progress=lambda pct, done, total: self.progress.emit(pct))
+        if res.get("ok"):
+            updater.cleanup_downloads(self.dest, keep=res["path"])
+        self.done.emit(res)
 
 
 class _RingWidget(QWidget):
@@ -1352,11 +1372,13 @@ class RakezMainWindow(QMainWindow):
         self.update_btn.setToolTip("Compare this version against the latest GitHub release")
         self.update_btn.clicked.connect(self._check_for_updates)
         upd_row.addWidget(self.update_btn)
-        self.update_open_btn = QPushButton("🌐 Open releases page")
-        self.update_open_btn.setVisible(False)
-        self.update_open_btn.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl(getattr(self, "_update_url", updater.RELEASES_URL))))
-        upd_row.addWidget(self.update_open_btn)
+        self.update_install_btn = QPushButton("⬇️ Download & Install update")
+        self.update_install_btn.setVisible(False)
+        self.update_install_btn.setToolTip("Download the new installer and install it automatically")
+        self.update_install_btn.setStyleSheet(
+            "background-color: #9ece6a; color: #1a1b26; font-weight: bold;")
+        self.update_install_btn.clicked.connect(self._download_and_install_update)
+        upd_row.addWidget(self.update_install_btn)
         self.update_label = QLabel(f"Current version: {updater.APP_VERSION}")
         self.update_label.setFont(QFont("Segoe UI", 8))
         self.update_label.setStyleSheet("color: #565f89;")
@@ -1434,19 +1456,88 @@ class RakezMainWindow(QMainWindow):
             self.update_label.setStyleSheet("color: #e0af68;")
             return
         latest = info.get("latest") or cur
-        self._update_url = info.get("url", updater.RELEASES_URL)
+        self._update_info = info
         if info.get("update_available"):
             self.update_label.setText(f"🆕 New version available: {latest} (you have {cur})")
             self.update_label.setStyleSheet("color: #9ece6a; font-weight: bold;")
-            self.update_open_btn.setVisible(True)
-            self._notify("Rakez", f"New version {latest} available! Open the releases page to download.")
+            has_installer = bool(info.get("asset_url"))
+            self.update_install_btn.setVisible(has_installer)
+            self.update_install_btn.setEnabled(True)
+            self.update_install_btn.setText("⬇️ Download & Install update")
+            if has_installer:
+                self._notify("Rakez", f"New version {latest} is ready — open Settings and press Download & Install.")
+            else:
+                self._notify("Rakez", f"New version {latest} is available, but the release has no installer attached.")
         else:
             self.update_label.setText(f"✓ Up to date — {cur} is the latest release")
             self.update_label.setStyleSheet("color: #565f89;")
-            self.update_open_btn.setVisible(False)
+            self.update_install_btn.setVisible(False)
             if not getattr(self, "_update_silent", False):
                 QMessageBox.information(self, "Updates",
                                         f"You are on the latest version ({cur}).")
+        self._update_silent = False
+
+    # ---- download & install update ----
+    def _download_and_install_update(self):
+        info = getattr(self, "_update_info", {}) or {}
+        url = info.get("asset_url") or ""
+        latest = info.get("latest") or "new version"
+        if not url:
+            QMessageBox.warning(
+                self, "Updates",
+                "This release has no installer file attached.\n"
+                "Ask the publisher to attach Rakez-Setup-*.exe to the GitHub release.")
+            return
+        size_mb = (info.get("asset_size") or 0) / (1024 * 1024)
+        detail = f" ({size_mb:.0f} MB)" if size_mb else ""
+        if QMessageBox.question(
+                self, "Install update",
+                f"Download and install Rakez {latest}{detail}?\n\n"
+                "The installer will run silently and Rakez will close to finish.\n"
+                "Your tasks and settings are kept.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        if getattr(self, "_download_worker", None) is not None and self._download_worker.isRunning():
+            return
+        self.update_install_btn.setEnabled(False)
+        self.update_install_btn.setText("⏳ Downloading… 0%")
+        self.update_label.setText(f"Downloading Rakez {latest}…")
+        self.update_label.setStyleSheet("color: #7aa2f7;")
+        self._download_worker = _UpdateDownloader(url, info.get("asset_name") or "", self)
+        self._download_worker.progress.connect(self._on_download_progress)
+        self._download_worker.done.connect(self._on_download_done)
+        self._download_worker.start()
+
+    def _on_download_progress(self, pct: int):
+        if pct < 0:
+            self.update_install_btn.setText("⏳ Downloading…")
+        else:
+            self.update_install_btn.setText(f"⏳ Downloading… {pct}%")
+
+    def _on_download_done(self, res: dict):
+        self.update_install_btn.setEnabled(True)
+        self.update_install_btn.setText("⬇️ Download & Install update")
+        if not res.get("ok"):
+            self.update_label.setText(f"⚠ Download failed: {res.get('error', 'unknown')}")
+            self.update_label.setStyleSheet("color: #e0af68;")
+            QMessageBox.warning(self, "Update failed",
+                                f"Could not download the update:\n\n{res.get('error', 'unknown')}")
+            return
+        path = res.get("path", "")
+        self.update_label.setText(f"✓ Downloaded — installing and restarting…")
+        self.update_label.setStyleSheet("color: #9ece6a;")
+        if not updater.run_installer(path):
+            self.update_label.setText("⚠ Could not start the installer")
+            self.update_label.setStyleSheet("color: #e0af68;")
+            QMessageBox.warning(self, "Update",
+                                f"The installer could not be started.\n\nYou can run it manually:\n{path}")
+            return
+        QMessageBox.information(
+            self, "Installing update",
+            "Rakez will close now and the installer will finish the update.\n"
+            "Open Rakez again after a few seconds.")
+        self._quit_app()
 
     def _save_settings(self):
         s = self.app_settings
