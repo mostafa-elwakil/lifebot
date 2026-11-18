@@ -16,6 +16,7 @@ DEFAULTS = {
     "google_client_id": "",
     "google_client_secret": "",
     "design": "pill",
+    "theme": "dark",
     "background": "#1a1b26",
     "opacity": 95,
 }
@@ -41,7 +42,27 @@ BACKGROUNDS = {
     "Pure Black": "#0d0d12",
     "Deep Navy": "#16213e",
     "Slate": "#2a2e45",
+    "Paper": "#f6f7fb",
+    "Warm Paper": "#fdf7e8",
+    "Mist": "#e9edf5",
 }
+
+#: Main window themes.
+THEMES = {"Dark (Tokyo Night)": "dark", "Light (Paper)": "light"}
+
+THEME_BACKGROUNDS = {"dark": "#1a1b26", "light": "#f6f7fb"}
+
+
+def is_light_color(value: str) -> bool:
+    """True when a #rrggbb color is light enough to need dark text."""
+    v = (value or "").strip().lstrip("#")
+    if len(v) != 6:
+        return False
+    try:
+        r, g, b = int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16)
+    except ValueError:
+        return False
+    return (0.299 * r + 0.587 * g + 0.114 * b) >= 150
 
 #: Extra combo entry that opens a full color picker.
 CUSTOM_LABEL = "🎨 Custom…"
@@ -92,6 +113,8 @@ def load_settings(data_dir: str | Path) -> dict:
         cfg["sound"] = DEFAULTS["sound"]
     if cfg.get("design") not in ("pill", "neon", "split", "retro"):
         cfg["design"] = DEFAULTS["design"]
+    if cfg.get("theme") not in ("dark", "light"):
+        cfg["theme"] = DEFAULTS["theme"]
     if not valid_hex(cfg.get("background", "")):
         cfg["background"] = DEFAULTS["background"]
     try:

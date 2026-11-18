@@ -24,7 +24,8 @@ from core.storage import SqliteStorage, CATEGORIES
 from core.coach import HermesCoach
 from core.joplin import JoplinClient, DEFAULT_FOLDER as JOPLIN_DEFAULT_FOLDER
 from core.settings import load_settings, save_settings, ACCENTS, DEFAULTS as SETTINGS_DEFAULTS
-from core.settings import SOUND_NAMES, DESIGNS, BACKGROUNDS, valid_hex
+from core.settings import (SOUND_NAMES, DESIGNS, BACKGROUNDS, THEMES,
+                           THEME_BACKGROUNDS, valid_hex, is_light_color)
 from core.google_sync import GoogleSync
 from core import updater
 
@@ -228,6 +229,10 @@ class FloatingTimerWidget(QWidget):
     def _float_style(self, attached: bool = False) -> str:
         a = self.accent
         bg = self._hex_to_rgb(self.background)
+        light = is_light_color(self.background)
+        text = "#1f2430" if light else "#c0caf5"
+        sub_bg = "#e5e9f3" if light else "#24283b"
+        border = "#c3c9d9" if light else "#414868"
         bottom = "0px" if attached else "16px"
         return f"""
             QWidget#container {{
@@ -248,25 +253,25 @@ class FloatingTimerWidget(QWidget):
                 border-bottom-left-radius: 16px;
                 border-bottom-right-radius: 16px;
             }}
-            QLabel {{ color: #c0caf5; font-family: 'Segoe UI', Arial; }}
+            QLabel {{ color: {text}; font-family: 'Segoe UI', Arial; }}
             QPushButton {{
-                background-color: #24283b;
+                background-color: {sub_bg};
                 border: 1px solid {a};
                 border-radius: 8px;
                 color: {a};
                 font-weight: bold;
             }}
-            QPushButton:hover {{ background-color: {a}; color: #1a1b26; }}
+            QPushButton:hover {{ background-color: {a}; color: {"#ffffff" if light else "#1a1b26"}; }}
             QLineEdit, QComboBox {{
-                background-color: #24283b;
-                border: 1px solid #414868;
+                background-color: {sub_bg};
+                border: 1px solid {border};
                 border-radius: 6px;
-                color: #c0caf5;
+                color: {text};
                 padding: 5px;
             }}
             QProgressBar {{
-                background-color: #24283b;
-                border: 1px solid #414868;
+                background-color: {sub_bg};
+                border: 1px solid {border};
                 border-radius: 4px;
                 text-align: center;
             }}
@@ -479,6 +484,10 @@ class FloatingTimerWidget(QWidget):
     # ---------- designs ----------
     def _make_task_labels(self, time_size: int = 15):
         """Shared labels (recreated on every design build)."""
+        light = is_light_color(self.background)
+        cat_color = "#7c3aed" if light else "#bb9af7"
+        mode_color = "#2f9e44" if light else "#9ece6a"
+        time_color = "#2f9e44" if light else "#9ece6a"
         self.task_label = QLabel(self.current_task)
         self.task_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         self.task_label.setStyleSheet(f"color: {self.accent};")
@@ -488,15 +497,15 @@ class FloatingTimerWidget(QWidget):
 
         self.cat_label = QLabel(f"🏷️ {self.current_category}")
         self.cat_label.setFont(QFont("Segoe UI", 8))
-        self.cat_label.setStyleSheet("color: #bb9af7;")
+        self.cat_label.setStyleSheet(f"color: {cat_color};")
 
         self.mode_label = QLabel("🎯 FOCUS")
         self.mode_label.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-        self.mode_label.setStyleSheet("color: #9ece6a;")
+        self.mode_label.setStyleSheet(f"color: {mode_color};")
 
         self.time_label = QLabel(f"{DEFAULTS['focus']:02d}:00")
         self.time_label.setFont(QFont("Consolas", time_size, QFont.Weight.Bold))
-        self.time_label.setStyleSheet("color: #9ece6a;")
+        self.time_label.setStyleSheet(f"color: {time_color};")
         self._update_time_display()
 
     def _make_buttons(self):
@@ -641,8 +650,9 @@ class FloatingTimerWidget(QWidget):
         layout.setContentsMargins(12, 10, 12, 10)
         self._make_task_labels(time_size=20)
         left = QFrame()
+        overlay = "rgba(0,0,0,0.04)" if is_light_color(self.background) else "rgba(0,0,0,0.25)"
         left.setStyleSheet(
-            f"QFrame {{ background-color: rgba(0,0,0,0.25); "
+            f"QFrame {{ background-color: {overlay}; "
             f"border: 1px solid {self.accent}; border-radius: 12px; }}")
         lv = QVBoxLayout(left)
         lv.addWidget(self.time_label)
@@ -879,11 +889,14 @@ class FloatingTimerWidget(QWidget):
         self._update_time_display()
 
     def toggle_timer(self):
+        light = is_light_color(self.background)
+        running_color = "#2f9e44" if light else "#9ece6a"
+        paused_color = "#b45309" if light else "#e0af68"
         if self.is_running:
             self.timer.stop()
             self.is_running = False
             self.toggle_btn.setText("▶")
-            self.time_label.setStyleSheet("color: #e0af68;")
+            self.time_label.setStyleSheet(f"color: {paused_color};")
         else:
             if self.remaining_seconds <= 0:
                 # expired timer: restart the same interval instead of
@@ -893,7 +906,7 @@ class FloatingTimerWidget(QWidget):
             self.timer.start(1000)
             self.is_running = True
             self.toggle_btn.setText("⏸")
-            self.time_label.setStyleSheet("color: #9ece6a;")
+            self.time_label.setStyleSheet(f"color: {running_color};")
 
     def _tick(self):
         if self.remaining_seconds > 0:
@@ -975,6 +988,7 @@ class RakezMainWindow(QMainWindow):
             data_dir=DATA_DIR,
             client_id=self.app_settings.get("google_client_id", ""),
             client_secret=self.app_settings.get("google_client_secret", ""))
+        self.theme = self.app_settings.get("theme", "dark")
         self.setWindowTitle("Rakez ركّز - AI Coach & Pomodoro")
         self.resize(880, 640)
 
@@ -999,34 +1013,87 @@ class RakezMainWindow(QMainWindow):
         self.floating_widget._build_design()
         self.floating_widget._build_design()
 
-        self._apply_theme()
         self._init_ui()
+        self._apply_theme()
         self._init_tray()
 
     def _apply_theme(self):
-        self.setStyleSheet("""
-            QMainWindow, QWidget { background-color: #1a1b26; color: #c0caf5; font-family: 'Segoe UI', sans-serif; }
-            QTabWidget::pane { border: 1px solid #292e42; background-color: #1f2335; border-radius: 8px; }
-            QTabBar::tab { background-color: #1a1b26; color: #7aa2f7; padding: 10px 18px; font-weight: bold; }
-            QTabBar::tab:selected { background-color: #1f2335; color: #bb9af7; border-bottom: 2px solid #7aa2f7; }
-            QPushButton { background-color: #24283b; border: 1px solid #414868; border-radius: 6px; color: #7aa2f7; padding: 8px 14px; font-weight: bold; }
-            QPushButton:hover { background-color: #7aa2f7; color: #1a1b26; }
-            QLineEdit, QTextEdit, QListWidget, QComboBox, QSpinBox { background-color: #24283b; border: 1px solid #414868; border-radius: 6px; color: #c0caf5; padding: 6px; }
+        """Dark (Tokyo Night) or Light (Paper) stylesheet for the dashboard."""
+        light = getattr(self, "theme", "dark") == "light"
+        if light:
+            bg, panel, border = "#f5f6fa", "#ffffff", "#d7dbe7"
+            text, muted, accent, accent2 = "#1f2430", "#6b7280", "#3b6fd4", "#7c3aed"
+            btn_bg, hover_text, input_bg = "#eef1f8", "#ffffff", "#ffffff"
+        else:
+            bg, panel, border = "#1a1b26", "#1f2335", "#292e42"
+            text, muted, accent, accent2 = "#c0caf5", "#565f89", "#7aa2f7", "#bb9af7"
+            btn_bg, hover_text, input_bg = "#24283b", "#1a1b26", "#24283b"
+        self.setStyleSheet(f"""
+            QMainWindow, QWidget {{ background-color: {bg}; color: {text}; font-family: 'Segoe UI', sans-serif; }}
+            QTabWidget::pane {{ border: 1px solid {border}; background-color: {panel}; border-radius: 8px; }}
+            QTabBar::tab {{ background-color: {bg}; color: {accent}; padding: 10px 18px; font-weight: bold; }}
+            QTabBar::tab:selected {{ background-color: {panel}; color: {accent2}; border-bottom: 2px solid {accent}; }}
+            QPushButton {{ background-color: {btn_bg}; border: 1px solid {border}; border-radius: 6px; color: {accent}; padding: 8px 14px; font-weight: bold; }}
+            QPushButton:hover {{ background-color: {accent}; color: {hover_text}; }}
+            QPushButton:disabled {{ color: {muted}; border-color: {border}; }}
+            QLineEdit, QTextEdit, QListWidget, QComboBox, QSpinBox {{
+                background-color: {input_bg}; border: 1px solid {border}; border-radius: 6px;
+                color: {text}; padding: 6px; selection-background-color: {accent};
+                selection-color: {hover_text};
+            }}
+            QListWidget::item {{ padding: 4px 2px; }}
+            QListWidget::item:selected {{ background-color: {accent}; color: {hover_text}; }}
+            QComboBox QAbstractItemView {{
+                background-color: {input_bg}; color: {text};
+                border: 1px solid {border}; selection-background-color: {accent};
+                selection-color: {hover_text};
+            }}
+            QCheckBox {{ color: {text}; }}
+            QScrollArea, QScrollBar:vertical {{ background-color: {panel}; }}
         """)
+        # labels created with inline styles (inline wins over the stylesheet)
+        if hasattr(self, "title_label"):
+            self.title_label.setStyleSheet(f"color: {accent};")
+        if hasattr(self, "status_label"):
+            self.status_label.setStyleSheet(f"color: {muted};")
+        if hasattr(self, "update_label"):
+            self.update_label.setStyleSheet(f"color: {muted};")
+
+    def _apply_theme_choice(self, name: str):
+        """Settings dropdown → switch the whole app palette instantly."""
+        key = THEMES.get(name, "dark")
+        if key == getattr(self, "theme", "dark"):
+            return
+        self.theme = key
+        self.app_settings["theme"] = key
+        self._apply_theme()
+        # keep the floating widget in the matching palette (unless the user
+        # deliberately picked a custom background from the other family)
+        current = getattr(self.floating_widget, "background", "#1a1b26")
+        if is_light_color(current) != (key == "light"):
+            bg = THEME_BACKGROUNDS.get(key, "#1a1b26")
+            self.floating_widget.set_background(bg)
+            self.app_settings["background"] = bg
+            if hasattr(self, "bg_combo"):
+                for label, hx in BACKGROUNDS.items():
+                    if hx == bg:
+                        self.bg_combo.setCurrentText(label)
+                        break
+        save_settings(DATA_DIR, self.app_settings)
 
     def _init_ui(self):
         main_widget = QWidget()
         layout = QVBoxLayout(main_widget)
 
         header = QHBoxLayout()
-        title = QLabel("🤖 Rakez ركّز Productivity System")
-        title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        title.setStyleSheet("color: #7aa2f7;")
+        self.title_label = QLabel("🤖 Rakez ركّز Productivity System")
+        self.title_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.title_label.setStyleSheet("color: #7aa2f7;")
 
         toggle_float_btn = QPushButton("📌 Show/Hide Floating")
         toggle_float_btn.clicked.connect(self.toggle_floating)
 
-        header.addWidget(title)
+        header.addWidget(self.title_label)
         header.addStretch()
         header.addWidget(toggle_float_btn)
         layout.addLayout(header)
@@ -1222,6 +1289,23 @@ class RakezMainWindow(QMainWindow):
         tab = QWidget()
         layout = QVBoxLayout(tab)
         s = self.app_settings
+
+        # --- appearance theme ---
+        layout.addWidget(QLabel("🎨 Theme:"))
+        theme_row = QHBoxLayout()
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(list(THEMES.keys()))
+        for label, key in THEMES.items():
+            if key == s.get("theme", "dark"):
+                self.theme_combo.setCurrentText(label)
+                break
+        self.theme_combo.currentTextChanged.connect(self._apply_theme_choice)
+        theme_row.addWidget(self.theme_combo)
+        theme_hint = QLabel("Light mode applies to the dashboard and the floating widget.")
+        theme_hint.setFont(QFont("Segoe UI", 8))
+        theme_hint.setStyleSheet("color: #6b7280;")
+        theme_row.addWidget(theme_hint, stretch=1)
+        layout.addLayout(theme_row)
 
         # --- widget size ---
         layout.addWidget(QLabel("🔳 Floating widget size:"))
@@ -1541,6 +1625,7 @@ class RakezMainWindow(QMainWindow):
 
     def _save_settings(self):
         s = self.app_settings
+        s["theme"] = THEMES.get(getattr(self, "theme_combo").currentText(), self.theme)
         s["widget_w"] = self.set_w_spin.value()
         s["widget_h"] = self.set_h_spin.value()
         s["accent"] = ACCENTS.get(self.accent_combo.currentText(), "#7aa2f7")

@@ -65,6 +65,39 @@ def test_ring_widget():
     ring.close()
 
 
+def test_light_theme_widget_and_settings_roundtrip():
+    from core.settings import is_light_color, load_settings, save_settings
+    assert is_light_color("#f6f7fb") and not is_light_color("#1a1b26")
+    assert is_light_color("#fdf7e8") and not is_light_color("#2a2e45")
+
+    _app_instance()
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_settings(td)
+        assert cfg["theme"] == "dark"
+        cfg["theme"] = "light"
+        save_settings(td, cfg)
+        assert load_settings(td)["theme"] == "light"
+        # invalid values fall back to dark
+        save_settings(td, {**cfg, "theme": "neon"})
+        assert load_settings(td)["theme"] == "dark"
+
+        store = SqliteStorage(data_dir=Path(td))
+        try:
+            w = rl.FloatingTimerWidget(store)
+            for design in ("pill", "neon", "split", "retro"):
+                w.set_design(design)
+                w.set_background("#f6f7fb")  # light palette: dark text
+                style = w.styleSheet()
+                assert "#1f2430" in style          # dark text on light card
+                assert "#24283b" not in style      # no dark input boxes
+                w.set_background("#1a1b26")        # dark palette: light text
+                assert "#c0caf5" in w.styleSheet()
+                assert w.time_label is not None
+            w.close()
+        finally:
+            store.close()
+
+
 def test_opacity_and_resize_signal():
     _app_instance()
     import tempfile
