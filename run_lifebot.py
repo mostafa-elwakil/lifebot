@@ -1339,6 +1339,10 @@ class RakezMainWindow(QMainWindow):
         auth_btn.setToolTip("Open browser once to grant access")
         auth_btn.clicked.connect(self._authorize_google)
         grow.addWidget(auth_btn)
+        test_btn = QPushButton("🔌 Test connection")
+        test_btn.setToolTip("Real API check: Google Tasks list + Calendar events access")
+        test_btn.clicked.connect(self._test_google_connection)
+        grow.addWidget(test_btn)
         layout.addLayout(grow)
 
         # --- update check ---
@@ -1488,7 +1492,31 @@ class RakezMainWindow(QMainWindow):
         self.status_label.setText(f"{mode}  •  Joplin: {self.joplin.status()}")
         self.settings_status.setText("✓ saved to settings.json" if ok else "⚠ save failed")
 
+    def _apply_google_creds_from_ui(self) -> bool:
+        """Pick up Client ID/Secret typed in Settings (no Save needed) and persist."""
+        cid = self.google_id_edit.text().strip()
+        sec = self.google_secret_edit.text().strip()
+        changed = (cid != (self.app_settings.get("google_client_id") or "")
+                   or sec != (self.app_settings.get("google_client_secret") or ""))
+        if changed:
+            self.app_settings["google_client_id"] = cid
+            self.app_settings["google_client_secret"] = sec
+            save_settings(DATA_DIR, self.app_settings)
+            self.gsync._cal = self.gsync._tasks = None  # rebuild with new creds
+        self.gsync.client_id = cid or os.getenv("GOOGLE_CLIENT_ID", "")
+        self.gsync.client_secret = sec or os.getenv("GOOGLE_CLIENT_SECRET", "")
+        if not (self.gsync.client_id and self.gsync.client_secret):
+            QMessageBox.warning(
+                self, "Google",
+                "Client ID and Client Secret are required.\n\n"
+                "Google Cloud Console → APIs & Services → Credentials →\n"
+                "Create OAuth client ID → Desktop app → copy both values here.")
+            return False
+        return True
+
     def _authorize_google(self):
+        if not self._apply_google_creds_from_ui():
+            return
         self.google_status_label.setText("⏳ opening browser for Google authorization...")
         QApplication.processEvents()
         if self.gsync.authorize():
@@ -1497,6 +1525,28 @@ class RakezMainWindow(QMainWindow):
         else:
             self.google_status_label.setText(f"⚠ Google: {self.gsync.last_error}")
             QMessageBox.warning(self, "Google", f"Authorization failed:\n{self.gsync.last_error}")
+
+    def _test_google_connection(self):
+        """Real API round-trip: Tasks list + Calendar primary (no writes)."""
+        if not self._apply_google_creds_from_ui():
+            return
+        self.google_status_label.setText("⏳ testing Google connection...")
+        QApplication.processEvents()
+        res = self.gsync.test_connection()
+        if res.get("ok"):
+            self.google_status_label.setText(f"✓ {res['message']}")
+            QMessageBox.information(self, "Google Test", f"Connection OK\n\n{res['message']}")
+        elif "authoriz" in res["message"].lower():
+            # configured but no token yet → offer the browser flow right away
+            if QMessageBox.question(
+                    self, "Google Test",
+                    f"{res['message']}\n\nAuthorize now?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            ) == QMessageBox.StandardButton.Yes:
+                self._authorize_google()
+        else:
+            self.google_status_label.setText(f"⚠ Google: {res['message']}")
+            QMessageBox.warning(self, "Google Test", f"Connection failed:\n\n{res['message']}")
 
     def _push_selected_to_google(self):
         key = self._selected_todo_key()

@@ -132,6 +132,29 @@ def stats(days: int = 7):
         console.print(t)
 
 
+@app.command(name="google-test")
+def google_test(authorize: bool = typer.Option(False, "--authorize", "-a",
+                                               help="Run the browser OAuth flow first")):
+    """Test the Google Calendar + Tasks connection (real API calls)."""
+    from core.google_sync import GoogleSync
+    from core.settings import load_settings
+    cfg = load_settings("data")
+    gs = GoogleSync(data_dir="data",
+                    client_id=cfg.get("google_client_id", ""),
+                    client_secret=cfg.get("google_client_secret", ""))
+    if authorize:
+        console.print("Opening browser for Google authorization...")
+        if not gs.authorize():
+            console.print(f"[red]Authorization failed:[/red] {gs.last_error}")
+            raise typer.Exit(1)
+        console.print("[green]Authorized.[/green] Token saved to data/google_token.json")
+    res = gs.test_connection()
+    color = "green" if res["ok"] else "yellow"
+    console.print(f"[{color}]{res['message']}[/{color}]")
+    if not res["ok"]:
+        raise typer.Exit(1)
+
+
 @app.command()
 def plan():
     """Print morning plan."""

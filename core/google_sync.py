@@ -29,6 +29,37 @@ def available() -> bool:
         return False
 
 
+def friendly_error(raw: str) -> str:
+    """Turn Google API/OAuth errors into actionable, user-facing messages."""
+    text = (raw or "").strip()
+    low = text.lower()
+    if "access_denied" in low or "403" in low or "verification process" in low:
+        return (
+            "Google blocked access (403 access_denied): this account is not a "
+            "developer-approved tester. Fix: Google Cloud Console → APIs & Services → "
+            "OAuth consent screen → Test users → + Add users → add the exact Gmail you "
+            "sign in with → Save, then press Authorize again. Make sure it is the same "
+            "Google Cloud project that owns the Client ID.")
+    if "invalid_client" in low or "unauthorized_client" in low:
+        return (
+            "Google rejected the Client ID/Secret (invalid_client). Re-copy both values "
+            "from Credentials → OAuth client ID, and make sure the client type is "
+            "'Desktop app' (not 'Web application').")
+    if "redirect_uri_mismatch" in low:
+        return (
+            "Redirect URI mismatch: recreate the OAuth client as a 'Desktop app' type "
+            "and paste its Client ID + Secret again.")
+    if "invalid_grant" in low or "expired" in low or "revoked" in low:
+        return ("Google authorization expired or was revoked. Press Authorize to reconnect.")
+    if "insufficient" in low and "scope" in low:
+        return (
+            "Google granted insufficient permissions. Remove Rakez from "
+            "https://myaccount.google.com/permissions then press Authorize again.")
+    if "quota" in low or "rate limit" in low:
+        return ("Google API quota/rate limit reached — try again in a minute.")
+    return text
+
+
 class GoogleSync:
     def __init__(self, data_dir: str | Path = "data", client_id: str = "",
                  client_secret: str = ""):
@@ -38,8 +69,15 @@ class GoogleSync:
         self.client_secret = client_secret or os.getenv("GOOGLE_CLIENT_SECRET", "")
         self.token_path = base / "google_token.json"
         self.last_error = ""
+        self.last_raw_error = ""
         self._cal = None
         self._tasks = None
+
+    def _set_error(self, exc_or_text) -> None:
+        """Keep the raw error for diagnostics, expose the friendly one."""
+        raw = str(exc_or_text) or exc_or_text.__class__.__name__
+        self.last_raw_error = raw[:500]
+        self.last_error = friendly_error(raw)
 
     @property
     def configured(self) -> bool:
@@ -69,6 +107,10 @@ class GoogleSync:
 
     def authorize(self) -> bool:
         """Interactive OAuth (opens browser). Returns True on success."""
+        if not self.client_id or not self.client_secret:
+            self.last_error = ("Client ID + Secret are missing — paste them from "
+                               "Google Cloud Console, then press Authorize again")
+            return False
         try:
             from google_auth_oauthlib.flow import InstalledAppFlow
             flow = InstalledAppFlow.from_client_config(self._client_config(), SCOPES)
@@ -78,7 +120,7 @@ class GoogleSync:
             self._cal = self._tasks = None
             return True
         except Exception as e:
-            self.last_error = str(e)[:200]
+            self._set_error(e)
             return False
 
     def _creds(self):
@@ -92,7 +134,7 @@ class GoogleSync:
                 creds.refresh(Request())
                 self.token_path.write_text(creds.to_json(), encoding="utf-8")
             except Exception as e:
-                self.last_error = str(e)[:200]
+                self._set_error(e)
                 return None
         return creds if creds and creds.valid else None
 
@@ -131,7 +173,7 @@ class GoogleSync:
             }).execute()
             return {"id": ev.get("id"), "link": ev.get("htmlLink")}
         except Exception as e:
-            self.last_error = str(e)[:200]
+            self._set_error(e)
             return None
 
     # --- Tasks ---
@@ -157,7 +199,7 @@ class GoogleSync:
                                    body={"title": title, "notes": notes}).execute()
             return {"id": t.get("id"), "title": t.get("title")}
         except Exception as e:
-            self.last_error = str(e)[:200]
+            self._set_error(e)
             return None
 
     def pull_tasks(self, max_n: int = 50) -> list[dict]:
@@ -178,5 +220,35 @@ class GoogleSync:
                             "completed": False, "google_id": t.get("id")})
             return [t for t in out if t["title"]]
         except Exception as e:
-            self.last_error = str(e)[:200]
+            self._set_error(e)
             return []
+
+    # --- connection check ---
+    def test_connection(self) -> dict:
+        """Real, lightweight API call to verify auth + scopes.
+
+        Returns {"ok": bool, "message": str}. Never raises.
+        """
+        if not available():
+            return {"ok": False, "message": "libs missing (pip install google-api-python-client google-auth-oauthlib)"}
+        if not self.client_id or not self.client_secret:
+            return {"ok": False, "message": "needs Client ID + Secret (Settings tab)"}
+        if not self.token_path.exists():
+            return {"ok": False, "message": "needs authorization (press Authorize)"}
+        try:
+            tsvc = self._tasks_service()
+            if not tsvc:
+                return {"ok": False, "message": self.last_error or "credentials invalid — re-authorize"}
+            lists = tsvc.tasklists().list().execute().get("items", [])
+            first = lists[0].get("title", "?") if lists else "(empty)"
+            cal_svc = self._cal_service()
+            if not cal_svc:
+                return {"ok": False, "message": self.last_error or "calendar access failed — re-authorize"}
+            evs = cal_svc.events().list(calendarId="primary", maxResults=1).execute()
+            n_ev = len(evs.get("items", []))
+            return {"ok": True,
+                    "message": f"connected — Tasks: {len(lists)} list(s) (first: {first}), "
+                               f"Calendar: primary OK ({n_ev} sample event)"}
+        except Exception as e:
+            self._set_error(e)
+            return {"ok": False, "message": f"API error: {self.last_error}"}

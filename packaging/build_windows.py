@@ -25,6 +25,17 @@ args = [
     "--add-data", f"{ROOT / 'assets' / 'logo.svg'}{';'}assets",
     "--hidden-import", "google.generativeai",  # imported lazily in coach.py
     "--collect-submodules", "google.generativeai",
+    # Calendar/Tasks are imported lazily inside core/google_sync.py, so
+    # PyInstaller cannot discover them — bundle them explicitly, including
+    # google_auth_oauthlib's local-server HTML templates (data files).
+    "--hidden-import", "googleapiclient.discovery",
+    "--hidden-import", "googleapiclient.discovery_cache",
+    "--collect-submodules", "googleapiclient",
+    "--hidden-import", "google_auth_oauthlib.flow",
+    "--collect-submodules", "google_auth_oauthlib",
+    "--collect-data", "google_auth_oauthlib",
+    "--hidden-import", "google.auth.transport.requests",
+    "--hidden-import", "google.oauth2.credentials",
     "--noconfirm",
     "--clean",
 ]
