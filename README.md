@@ -1,155 +1,253 @@
-﻿# <img src="assets/logo.svg" width="48" align="top"> Rakez ركّز — AI Coach & Pomodoro
+﻿<div align="center">
 
-نظام إنتاجية شخصي: مؤقت بومودورو عائم + مهام + مدرب AI (Hermes) + مزامنة ثنائية الاتجاه مع Joplin.
+<img src="assets/logo.svg" width="88" alt="Rakez logo" />
 
-> Personal productivity system: floating Pomodoro timer + tasks + AI coach + two-way Joplin sync.
+# Rakez ركّز
+**نظام إنتاجية شخصي كامل: بومودورو عائم + مهام ومشاريع + مدرب ذكي + مزامنة مع Joplin وGoogle.**
+
+[![Release](https://img.shields.io/github/v/release/mostafa-elwakil/lifebot?label=latest&color=7aa2f7)](https://github.com/mostafa-elwakil/lifebot/releases/latest)
+[![Build](https://github.com/mostafa-elwakil/lifebot/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mostafa-elwakil/lifebot/actions/workflows/build-windows.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-3776AB)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-9ece6a)](#-التنزيل)
+
+[التنزيل](#-التنزيل) · [المميزات](#-المميزات) · [الموقع](#-الموقع) · [الأسئلة الشائعة](#-استكشاف-الأخطاء)
+
+</div>
 
 ---
 
-## المميزات | Features
+## ✨ المميزات | Features
 
-- ⏱️ **بومودورو احترافي**: مؤقت عائم فوق الشاشة (Always on Top)، فترات تركيز + بريك قصير/طويل، صوت تنبيه، إشعارات، عدّ الدورات (long break كل 4).
-- 📋 **مهام كاملة**: إضافة/حذف/إتمام (double-click)، أولويات، عدّاد 🍅 تلقائي لكل مهمة، تخزين SQLite.
-- 🧠 **Hermes AI Coach**: خطة صباحية + حل الأعذار + مراجعة يومية — بـ Gemini AI عند توفر المفتاح، ووضع offline عند غيابه.
-- 🔄 **مزامنة Joplin ثنائية الاتجاه**:
-  - إضافة مهمة من البرنامج → تظهر فورًا في نوت بوك `Projects/Lifebot/Tasks` ومعاها tags + due date (آخر اليوم) عشان تظهر في لوحات Kanban/All-Tasks.
-  - مهمة من Joplin (New to-do جوه نفس النوت بوك) → تُسحب للبرنامج بزر **⬇ Pull** + سحب تلقائي عند التشغيل.
-  - منع التكرار: الـ POST يُرسل مرة واحدة، والتحقق بالعنوان قبل أي إعادة.
-  - تنظيف المكررات القديمة: `python -m cli.app dedupe [--apply]`.
-- 📊 **تحليلات**: دقائق التركيز (7 أيام)، توزيع بالتصنيف، streak الأيام.
-- 💻 **CLI كامل** بـ Typer + Rich.
+### ⏱️ بومودورو عائم فوق كل البرامج
+- مؤقت Always-on-Top بتصاميم متعددة: **Glass Pill / Neon Card / Split Flip / Typewriter**.
+- فترات تركيز + بريك قصير/طويل تلقائي (كل 4 دورات)، أصوات تنبيه، إشعارات، ونسبة تقدم حية.
+- تشغيل/إيقاف، إعادة ضبط، تبديل المهمة من داخل الودجت نفسه.
 
-## التشغيل | Quickstart
+### 📁 مشاريع ومهام بنسبة إنجاز
+- أنشئ **مشاريع** وضع فيها المهام، ويُحسب التقدم تلقائيًا: `2/5 (40%)`.
+- تجميع المهام تحت عنوان كل مشروع + قسم للمهام غير المصنفة.
+- نقل مهمة موجودة لمشروع، أو إنشاء مشروع جديد مباشرة من الحوار.
+- حذف مشروع لا يحذف مهامه — تصبح غير مصنفة.
+
+### 🧠 Hermes AI Coach
+- خطة صباحية، حل الأعذار، ومراجعة يومية.
+- يعمل مع **Gemini** عند إضافة المفتاح، وبدونه يقدّم وضع **Offline** مفيدًا بدون إنترنت.
+
+### 🔄 مزامنة ثنائية الاتجاه
+- **Joplin**: مهامك تظهر فورًا في `Projects/Lifebot/Tasks` مع tags وموعد استحقاق، وسحب مهام Joplin للبرنامج (زر Pull + تلقائي عند التشغيل). أمر `dedupe` لتنظيف التكرار.
+- **Google Tasks**: دفع/سحب المهام.
+- **Google Calendar**: تسجيل جلسات التركيز المنتهية كأحداث تلقائيًا.
+- **زر Test connection** يتحقق فعليًا من الصلاحيات، ورسائل أخطاء ودّية (مثل `access_denied` مع خطوات الحل).
+
+### 📊 تحليلات وتقدّم
+- دقائق التركيز خلال 7 أيام، توزيع الدقائق حسب التصنيف، الأيام المتتالية (Streak)، المهام المنجزة.
+
+### 🎨 مظهر فاتح وداكن
+- ثيم **Dark (Tokyo Night)** و**Light (Paper)** للنافذة والودجت.
+- تخصيص لون التمييز، حجم الودجت، شفافيته، وخلفيته (بما فيها خلفيات فاتحة).
+
+### ⬆️ تحديثات بضغطة واحدة
+- البرنامج يفحص GitHub Releases عند التشغيل، ثم زر **Download & Install update** ينزّل المثبّت ويعرض نسبة التقدم ويثبّت ويغلق البرنامج تلقائيًا — بدون فتح صفحة الإصدارات.
+
+### 💻 CLI + Local API
+- كل شيء متاح من الطرفية (إضافة/إتمام/إحصاءات/مشاريع/مزامنة).
+- HTTP API محلي للمصادقة والتكامل مع أدوات خارجية.
+
+---
+
+## 📥 التنزيل | Download
+
+> **Windows 10/11** — لا يحتاج Python.
+
+[**⬇️ تحميل أحدث نسخة (Rakez-Setup.exe)**](https://github.com/mostafa-elwakil/lifebot/releases/latest)
+
+1. حمّل المثبّت وشغّله (اختر اختصار سطح المكتب إن أردت).
+2. افتح Rakez — بياناتك تُحفظ في `%APPDATA%\Rakez\data`.
+3. التحديثات القادمة بضغطة واحدة من: **Settings → Check for updates → Download & Install**.
+
+> ملاحظة: الملف غير موقّع بشهادة Code Signing، فقد تظهر رسالة SmartScreen "Unknown publisher". اضغط **More info → Run anyway** — الناشر داخل خصائص الملف هو **Mostafa Elwakil**.
+>
+> Linux: `bash packaging/build_linux.sh` بعد تثبيت المتطلبات.
+
+---
+
+## 🌐 الموقع
+
+الموقع التسويقي (GitHub Pages): **https://mostafa-elwakil.github.io/lifebot/**
+
+المصدر داخل مجلد [`website/`](website) — صفحة واحدة عربية RTL بتصميم حديث، ثيم فاتح/داكن، وتحميل تلقائي لأحدث إصدار.
+
+---
+
+## 🚀 التشغيل من المصدر | Quickstart
 
 ```bash
+git clone https://github.com/mostafa-elwakil/lifebot.git
+cd lifebot
 pip install -r requirements.txt
-cp .env.example .env   # ثم املأ المفاتيح
-python run_lifebot.py
+cp .env.example .env        # اختياري — املأ ما تحتاجه
+python run_lifebot.py       # الواجهة الرسومية
 ```
 
-## الإعداد | Configuration
+جرّب من الطرفية:
 
-`.env` (انسخه من `.env.example`):
+```bash
+python -m cli.app list
+python -m cli.app add "تصميم الصفحة" --project Website --priority high
+python -m cli.app projects
+python -m cli.app stats --days 7
+python -m cli.app google-test          # فحص ربط Google
+python -m pytest tests -q              # 57 اختبارًا
+```
+
+---
+
+## ⚙️ الإعداد | Configuration
+
+### متغيرات `.env` (كلها اختيارية)
 
 ```env
-GEMINI_API_KEY=...        # اختياري — بدونه يعمل المدرب offline
-JOPLIN_TOKEN=...          # من Joplin Desktop: Settings → Web Clipper → Authorization token
+GEMINI_API_KEY=            # مدرب Hermes أونلاين (بدونه وضع Offline)
+JOPLIN_TOKEN=              # Joplin Desktop → Settings → Web Clipper
 JOPLIN_BASE_URL=http://127.0.0.1:41184
+GOOGLE_CLIENT_ID=          # من Google Cloud Console (Desktop app)
+GOOGLE_CLIENT_SECRET=
+API_TOKEN=                 # لحماية الـ HTTP API المحلي (Bearer)
 ```
 
-`config/config.yaml`:
+### `config/config.yaml`
 
 ```yaml
 joplin:
   base_url: "http://127.0.0.1:41184"
-  token: "YOUR_JOPLIN_TOKEN"   # الأفضلية لمتغير البيئة JOPLIN_TOKEN
-  folder_name: "Projects/Lifebot/Tasks"  # يدعم المسارات المتداخلة، وينشئ الناقص
-  tags: "task,lifebot"        # تاجز لوحات الـ Kanban
+  token: "YOUR_JOPLIN_TOKEN"
+  folder_name: "Projects/Lifebot/Tasks"   # يدعم المسارات المتداخلة وينشئ الناقص
+  tags: "task,lifebot"                    # تاجز لوحات Kanban
 ```
 
-> ملاحظة: التكامل يحتاج **Joplin Desktop مفتوحًا** (الـ Clipper على `41184`) — سيرفر الدوكر وحده لا يكفي، وزرار Synchronise **غير مطلوب** للإضافة (يحدث لحظيًا).
+> Joplin يحتاج **Joplin Desktop مفتوحًا** (Web Clipper على المنفذ `41184`). زر Synchronise غير مطلوب للإضافة.
 
-## الاستخدام | Usage
+### ربط Google (Calendar + Tasks)
 
-### الواجهة (GUI)
+1. [Google Cloud Console](https://console.cloud.google.com) → مشروع جديد.
+2. فعّل **Google Calendar API** و **Google Tasks API**.
+3. **OAuth consent screen** → External → أضف بريدك في **Test users**.
+4. **Credentials → Create OAuth client ID → Desktop app** → انسخ Client ID + Secret.
+5. داخل Rakez → **Settings**: الصق القيمتين → **🔓 Authorize** → **🔌 Test connection**.
 
-| تبويب | الاستخدام |
+> ⚠️ إن ظهرت رسالة **"Access blocked: Rakez has not completed verification"** فمعناها أن حسابك ليس Test user. أضفه من OAuth consent screen → Test users. البرنامج يعرض لك هذه الخطوات تلقائيًا.
+>
+> في وضع Testing تنتهي صلاحية التوكن كل 7 أيام. للحل الدائم: **Publish app** → In production (تظل شاشة "unverified" طبيعية لتطبيق شخصي).
+
+---
+
+## 🖥️ الاستخدام | Usage
+
+### الواجهة الرسومية
+
+| التبويب | الوظيفة |
 |---|---|
-| ⏱️ Pomodoro | اختر مهمة والمدة → أرسلها للعداد العائم وابدأ |
-| 📋 Tasks | إضافة (Enter)، إتمام (double-click)، حذف، مسح المنجز، **⬆ Sync** للدفع، **⬇ Pull** للسحب |
+| ⏱️ Pomodoro | اختر مهمة ومدة → أرسلها للودجت العائم وابدأ |
+| 📋 Tasks | إضافة/إتمام/حذف، مشاريع ونسبة إنجاز، دفع وسحب Joplin وGoogle |
 | 🧠 Hermes | خطة صباحية / حل عذر / مراجعة يومية |
-| 📊 Analytics | إحصائيات + 🔄 تحديث |
+| 📊 Analytics | إحصاءات التركيز والتصنيفات وStreak |
+| ⚙️ Settings | الثيم، حجم/شفافية/تصميم الودجت، المفاتيح، Google، التحديثات |
 
-### سطر الأوامر (CLI)
+اختصارات: `Enter` لإضافة مهمة، `double-click` لإتمامها.
+
+### سطر الأوامر
 
 ```bash
-python -m cli.app list                    # المهام المفتوحة
-python -m cli.app add "مهمة" --category Ops --priority high --estimate 2
-python -m cli.app done <id|title>         # إتمام
-python -m cli.app rm <id|title>           # حذف
-python -m cli.app stats --days 7          # إحصائيات
+python -m cli.app list                          # المهام المفتوحة
+python -m cli.app add "مهمة" -p Website        # إضافة داخل مشروع (ينشئه إن لزم)
+python -m cli.app projects                      # المشاريع وتقدمها
+python -m cli.app assign "مهمة" "مشروع"        # نقل مهمة إلى مشروع
+python -m cli.app done <id|title>
+python -m cli.app rm <id|title>
+python -m cli.app stats --days 7
 python -m cli.app plan | python -m cli.app review
-python -m cli.app dedupe                  # تقرير المكرر في Joplin (dry-run)
-python -m cli.app dedupe --apply          # حذف المكرر (الأحدث يُحفظ، الباقي للـ Trash)
+python -m cli.app dedupe [--apply]
+python -m cli.app google-test [--authorize]
+python -m cli.app serve --port 8765
 ```
 
-## لوحة Joplin (Kanban)
+---
 
-اعمل نوتة داخل `Tasks` فيها:
-
-````markdown
-```kanban
-filters:
-  rootNotebookPath: Projects/Lifebot/Tasks
-columns:
-  - name: To Do
-    backlog: true
-  - name: In Progress
-    tag: wip
-  - name: Done
-    completed: true
-```
-````
-
-## استكشاف الأخطاء | Troubleshooting
-
-| الرسالة | المعنى والحل |
-|---|---|
-| `Joplin busy — wait and retry` | Joplin مشغول (بيعمل Sync) — انتظر ثواني وأعد |
-| `Desktop closed?` | افتح Joplin Desktop وفعّل Web Clipper على `41184` |
-| `Wrong JOPLIN_TOKEN` | انسخ التوكن من جديد من إعدادات Web Clipper |
-| اللوحة صفر رغم وجود المهام | تأكد أن اللوحة تقرأ نفس النوت بوك + دوس ⟳ أعلى اللوحة |
-| `Pull` لا يجد مهام Joplin | لازم **New to-do** (مش note) **داخل** نوت بوك المهام |
-
-## ربط Google (Calendar + Tasks) | Google integration
-
-1. من [Google Cloud Console](https://console.cloud.google.com): مشروع جديد → فعّل **Google Calendar API** و **Google Tasks API**.
-2. OAuth consent screen (External/test mode) + ضيف إيميلك كـ test user.
-3. Credentials → Create OAuth client ID (نوع **Desktop app**) → انسخ الـ Client ID والـ Secret.
-4. في تبويب ⚙️ Settings: الصقهما → 💾 Save → 🔓 Authorize (المتصفح يفتح مرة واحدة).
-5. الاستخدام: جلسة التركيز تُسجَّل في Calendar لو علّمت ☑ في تبويب Pomodoro — والمهام دفع/سحب من تبويب Tasks.
-
-## التطوير | Development
-
-```bash
-python -m pytest tests/ -q     # 23 اختبار
-```
-
-## واجهة HTTP المحلية | Local API (للاختبار والتكامل)
+## 🔌 الـ HTTP API المحلي
 
 ```bash
 python -m cli.app serve --port 8765
-# API_TOKEN=secret python -m cli.app serve   # بوضع المصادقة (Bearer)
+# API_TOKEN=secret python -m cli.app serve    # يتطلب Authorization: Bearer <token>
 ```
 
 | الطلب | الوصف |
 |---|---|
-| `GET /health` | فحص |
-| `GET /tasks` / `POST /tasks` | قائمة / إنشاء `{title, category?, priority?, estimate?}` |
-| `PUT /tasks/<id>` | تحديث `{completed?, title?, category?, priority?}` |
-| `DELETE /tasks/<id>` | حذف |
-| `GET /sessions` / `POST /sessions` | الجلسات `{task, category?, duration_min?, kind?}` |
-| `GET /stats?days=7` | الإحصائيات |
+| `GET /health` | فحص الحالة |
+| `GET /tasks` · `POST /tasks` | قائمة/إنشاء `{title, category?, priority?, estimate?, project_id?}` |
+| `PUT /tasks/<id-or-title>` | تحديث `{completed?, title?, category?, priority?, project_id?}` |
+| `DELETE /tasks/<id-or-title>` | حذف مهمة |
+| `GET /projects` | المشاريع مع `total/done/pct` |
+| `POST /projects` | إنشاء مشروع `{name}` |
+| `DELETE /projects/<id-or-name>` | حذف مشروع (المهام تبقى غير مصنفة) |
+| `GET /projects/<id>/tasks` | مهام مشروع (و`_NO_PROJECT_` لغير المصنفة) |
+| `GET /sessions` · `POST /sessions` | جلسات التركيز |
+| `GET /stats?days=7` | الإحصاءات |
 
-البنية:
+---
+
+## 🧪 التطوير والبناء
+
+```bash
+python -m pytest tests -q          # 57 اختبارًا
+
+python packaging/build_windows.py  # dist/Rakez.exe
+iscc packaging/Rakez.iss           # dist/Rakez-Setup-<version>.exe
+```
+
+- الإصدار الحالي يُحدَّد في: `core/updater.py` (`APP_VERSION`)، `packaging/Rakez.iss`، `packaging/version_info.txt`.
+- **GitHub Actions** يبني ويختبر المثبّت على كل **tag** جديد (`v*`) وينشره تلقائيًا في Releases.
+- صفحات الموقع تُنشر تلقائيًا من `website/` عبر GitHub Pages.
+
+### هيكل المشروع
 
 ```
-core/      models.py storage.py(SQLite) coach.py(Gemini+offline) joplin.py(API)
-cli/       app.py (Typer)
-config/    config.yaml prompt.py
-assets/    logo.svg icon.ico icon-*.png make_icon.py
-packaging/ build_windows.py build_linux.sh version_info.txt Rakez.iss rakeze.desktop
-data/      lifebot.db (+ todos.json القديم للهجرة)
-tests/     test_lifebot.py
-run_lifebot.py  (واجهة PyQt6)
+run_lifebot.py        الواجهة الرسومية (PyQt6) + الودجت العائم
+core/
+  models.py           نماذج المهمة
+  storage.py          SQLite + المشاريع + الهجرة من JSON
+  coach.py            Hermes (Gemini + Offline)
+  joplin.py           عميل Joplin Web Clipper
+  google_sync.py      Calendar + Tasks (OAuth2)
+  updater.py          فحص/تنزيل/تثبيت التحديثات
+  api.py              HTTP API محلي
+  settings.py         الإعدادات والثيمات
+cli/app.py            أوامر Typer
+config/               config.yaml + prompt.py
+website/              الموقع التسويقي (GitHub Pages)
+packaging/            PyInstaller + Inno Setup + Linux
+tests/                57 اختبارًا
 ```
 
-## النسخ الجاهزة | Releases
+---
 
-- **Windows:** شغّل `python packaging/build_windows.py` → ينتج `dist/Rakez.exe`
-  (واجهة رسومية **بدون نافذة terminal**، بالأيقونة وبيانات الناشر Mostafa Elwakil).
-  البيانات تُحفظ في `%APPDATA%\Rakez\data`، والمفاتيح من `.env` بجانب الـ exe.
-- **مثبت Windows:** ثبّت Inno Setup 6 ثم `iscc packaging\Rakez.iss` → ينتج `dist/Rakez-Setup-1.0.0.exe`
-  (أيقونة سطح مكتب اختيارية + تشغيل بعد التثبيت).
-- **Linux:** على جهاز لينكس شغّل `bash packaging/build_linux.sh` → ينتج `dist/Rakez`
-  (+ ملف `packaging/rakeze.desktop` لقائمة التطبيقات، بدون terminal).
+## 🩺 استكشاف الأخطاء
+
+| الحالة | الحل |
+|---|---|
+| `Joplin busy — wait and retry` | Joplin يعمل Sync — انتظر ثوانٍ وأعد المحاولة |
+| `Joplin not configured` | أضف `JOPLIN_TOKEN` أو الصقه في Settings |
+| Pull لا يجد مهام | يجب أن تكون **New to-do** داخل نفس الـ notebook |
+| `access_denied` من Google | أضف بريدك في Test users (الرسالة داخل البرنامج تشرح الخطوات) |
+| `invalid_client` | أعد نسخ Client ID/Secret وتأكد أن النوع **Desktop app** |
+| تحديث لا يظهر | تأكد من وجود اتصال، أو حمّل المثبّت يدويًا من Releases |
+| اختفاء البيانات بعد تحديث | بياناتك في `%APPDATA%\Rakez\data` ولا تُمسح بالتحديث |
+
+---
+
+<div align="center">
+
+صُنع بـ ❤️ بواسطة **Mostafa Elwakil**
+
+⭐ لو أعجبك المشروع، اعمله Star على GitHub
+
+</div>
