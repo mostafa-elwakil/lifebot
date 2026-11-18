@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mostafa-elwakil.github.io/lifebot/sitemap.xml
