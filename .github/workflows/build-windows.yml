@@ -58,3 +58,8 @@ jobs:
           files: dist/Rakez-Setup-*.exe
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # Releases created with GITHUB_TOKEN are attributed to
+          # github-actions[bot]. To publish as your own account, add a
+          # fine-grained PAT with "Contents: read and write" as the
+          # repository secret RELEASE_TOKEN (Settings → Secrets → Actions).
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
