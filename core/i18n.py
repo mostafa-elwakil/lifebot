@@ -334,6 +334,7 @@ AR = {
     # ---- tray ----
     "Show Dashboard": "إظهار اللوحة",
     "Quit": "خروج",
+    "Rakez ركّز": "ركّز",
 
     # ---- projects / tasks dialogs ----
     "New Project": "مشروع جديد",
