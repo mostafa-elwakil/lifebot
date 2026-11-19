@@ -16,6 +16,7 @@ DEFAULTS = {
     "google_client_id": "",
     "google_client_secret": "",
     "design": "pill",
+    "language": "",
     "theme": "dark",
     "background": "#1a1b26",
     "opacity": 95,
@@ -115,6 +116,8 @@ def load_settings(data_dir: str | Path) -> dict:
         cfg["design"] = DEFAULTS["design"]
     if cfg.get("theme") not in ("dark", "light"):
         cfg["theme"] = DEFAULTS["theme"]
+    if cfg.get("language") not in ("en", "ar", ""):
+        cfg["language"] = ""
     if not valid_hex(cfg.get("background", "")):
         cfg["background"] = DEFAULTS["background"]
     try:

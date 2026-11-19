@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rakez — Floating Pomodoro + Projects &amp; Tasks + AI Coach</title>
+<meta name="description" content="Rakez: one productivity system that combines a floating Pomodoro timer on top of every app, projects with progress, an AI coach, and Joplin / Google sync. Free, no sign-up, your data stays on your PC." />
+<meta name="theme-color" content="#12131c" />
+<link rel="icon" href="../assets/icon-256.png" />
+<link rel="apple-touch-icon" href="../assets/icon-256.png" />
+<link rel="canonical" href="https://mostafa-elwakil.github.io/lifebot/en/" />
+<link rel="alternate" hreflang="ar" href="https://mostafa-elwakil.github.io/lifebot/" />
+<link rel="alternate" hreflang="en" href="https://mostafa-elwakil.github.io/lifebot/en/" />
+<link rel="alternate" hreflang="x-default" href="https://mostafa-elwakil.github.io/lifebot/" />
+<link rel="stylesheet" href="../styles.css" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Rakez — Floating Pomodoro + Projects &amp; Tasks + AI Coach" />
+<meta property="og:description" content="Floating Pomodoro timer above every app, projects with progress, an AI coach, and Joplin + Google Calendar sync. Free for Windows." />
+<meta property="og:image" content="https://mostafa-elwakil.github.io/lifebot/assets/icon-512.png" />
+<meta property="og:url" content="https://mostafa-elwakil.github.io/lifebot/en/" />
+<meta property="og:locale" content="en_US" />
+<meta property="og:locale:alternate" content="ar_EG" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Rakez ركّز",
+  "applicationCategory": "ProductivityApplication",
+  "operatingSystem": "Windows 10, Windows 11",
+  "description": "Floating Pomodoro timer above every app, projects and tasks with progress, an AI coach, and Joplin / Google sync.",
+  "url": "https://mostafa-elwakil.github.io/lifebot/en/",
+  "downloadUrl": "https://github.com/mostafa-elwakil/lifebot/releases/latest",
+  "softwareVersion": "2.0.6",
+  "inLanguage": "en",
+  "author": { "@type": "Person", "name": "Mostafa Elwakil" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+
+<script>
+  // apply the saved theme before paint to avoid a flash
+  try {
+    var saved = localStorage.getItem("rakez-theme");
+    var sys = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.dataset.theme = saved || sys;
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header" id="top">
+  <div class="container header-inner">
+    <a class="brand" href="#top" aria-label="Rakez — home">
+      <img src="../assets/logo.svg" alt="" width="42" height="42" />
+      <span class="brand-text">
+        <strong>Rakez</strong>
+        <small>ركّز</small>
+      </span>
+    </a>
+
+    <nav class="nav" id="nav" aria-label="Main navigation">
+      <a href="#features">Features</a>
+      <a href="#designs">Designs</a>
+      <a href="#how">How it works</a>
+      <a href="#integrations">Integrations</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+
+    <div class="header-actions">
+      <a class="icon-btn lang-btn" href="../" hreflang="ar" lang="ar"
+         aria-label="التبديل إلى العربية" title="العربية">ع</a>
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="Toggle light and dark mode" title="Toggle theme">
+        <svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.6M12 19.4V22M2 12h2.6M19.4 12H22M4.9 4.9l1.9 1.9M17.2 17.2l1.9 1.9M19.1 4.9l-1.9 1.9M6.8 17.2l-1.9 1.9"/></svg>
+      </button>
+      <a class="btn btn-primary btn-sm hide-sm" href="#download">Download</a>
+      <button class="icon-btn menu-btn" id="menu-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ================= HERO ================= -->
+  <section class="hero">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <p class="badge"><span class="live-dot"></span> Version <span data-version>latest</span> available for Windows 10/11</p>
+        <h1>Focus on what matters.<br /><span class="grad">Let Rakez handle the rest.</span></h1>
+        <p class="lede">
+          One productivity system that brings together a <strong>floating Pomodoro timer</strong> above
+          every app, <strong>projects and tasks with progress</strong>, an <strong>AI coach</strong>,
+          and sync with <strong>Joplin</strong> and <strong>Google</strong> — with a bilingual
+          interface and light &amp; dark themes.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href="#download" data-download-link>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>
+            Download free
+          </a>
+          <a class="btn btn-ghost btn-lg" href="https://github.com/mostafa-elwakil/lifebot" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.1-1.47-1.1-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.88 1.52 2.34 1.08 2.9.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.4 9.4 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
+            View on GitHub
+          </a>
+        </div>
+        <ul class="hero-meta">
+          <li>✔️ No sign-up</li>
+          <li>✔️ Works offline</li>
+          <li>✔️ Your data stays with you</li>
+        </ul>
+      </div>
+
+      <div class="hero-visual">
+        <div class="visual-frame">
+          <div class="visual-topbar">
+            <span class="tl-dot red"></span><span class="tl-dot amber"></span><span class="tl-dot green"></span>
+            <span class="tl-title">Rakez — Focus Session</span>
+          </div>
+          <div class="visual-body">
+            <div class="wdemo" id="hero-demo" data-design="pill">
+              <div class="wd-top">
+                <span class="wd-mode"><i></i> Focus</span>
+                <span class="wd-cycles"><b class="on"></b><b class="on"></b><b></b><b></b></span>
+              </div>
+              <div class="wd-main">
+                <div class="wd-text">
+                  <p class="wd-task">Design the landing page</p>
+                  <p class="wd-cat">Project: Website · 2/5 tasks</p>
+                </div>
+                <div class="wd-clock" data-clock>24:59</div>
+              </div>
+              <div class="wd-progress"><i style="width:42%"></i></div>
+              <div class="wd-actions">
+                <button type="button" class="wd-play">▶</button>
+                <button type="button">↺</button>
+                <button type="button">＋</button>
+              </div>
+            </div>
+
+            <div class="mini-note">
+              <div class="mini-note-head"><span class="dot"></span> New task in Joplin</div>
+              <p>Design the landing page <span class="tag">#task</span></p>
+              <small>Projects/Lifebot/Tasks · today</small>
+            </div>
+          </div>
+        </div>
+        <div class="float-chip chip-1">🍅 4 cycles done</div>
+        <div class="float-chip chip-2">🔥 Streak: 12 days</div>
+      </div>
+    </div>
+
+    <div class="container stat-strip">
+      <div class="stat"><strong>4</strong><span>widget designs</span></div>
+      <div class="stat"><strong>65</strong><span>automated tests</span></div>
+      <div class="stat"><strong>0</strong><span>accounts or subscriptions</span></div>
+      <div class="stat"><strong>74MB</strong><span>installer size</span></div>
+    </div>
+  </section>
+
+  <!-- ================= FEATURES ================= -->
+  <section class="section" id="features">
+    <div class="container">
+      <header class="section-head">
+        <p class="eyebrow">Features</p>
+        <h2>Everything you need to focus, in one place</h2>
+        <p class="section-sub">Instead of opening five apps: timer, tasks, projects, sync, and analytics — all in one lightweight window.</p>
+      </header>
+
+      <div class="cards">
+        <article class="card reveal">
+          <div class="card-ico bg-blue">⏱️</div>
+          <h3>Floating Pomodoro above everything</h3>
+          <p>A small timer that stays on top of the screen while you work in any app. Focus periods, a short break, and an automatic long break every 4 cycles — with sound and notifications.</p>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-ico bg-purple">📁</div>
+          <h3>Projects with live progress</h3>
+          <p>Group tasks into projects and get the percentage automatically <code>2/5 · 40%</code>. Move an existing task into a project, or create one from the same dialog.</p>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-ico bg-green">🧠</div>
+          <h3>The Hermes AI coach</h3>
+          <p>A morning plan, help with excuses (“no time”, “can’t start”), and a daily review. Runs with Gemini, and without a key it still gives useful offline advice.</p>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-ico bg-teal">🔄</div>
+          <h3>Two-way Joplin sync</h3>
+          <p>Your tasks land instantly in <code>Projects/Lifebot/Tasks</code> with tags and a due date, and you can pull Joplin to-dos back in one click — duplicates are skipped.</p>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-ico bg-amber">📅</div>
+          <h3>Google Calendar &amp; Tasks</h3>
+          <p>Log finished focus sessions as calendar events automatically, and push/pull Google Tasks. The “Test connection” button really checks your permissions.</p>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-ico bg-pink">📊</div>
+          <h3>Real analytics</h3>
+          <p>Focus minutes over the last 7 days, time per category, your streak, and completed task counts — all from your own data.</p>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-ico bg-blue">🎨</div>
+          <h3>Light &amp; dark, four designs</h3>
+          <p>A <strong>Dark (Tokyo Night)</strong> and a <strong>Light (Paper)</strong> theme, plus custom accent color, size, opacity, and background — the widget adjusts its contrast automatically.</p>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-ico bg-green">⬆️</div>
+          <h3>One-click updates</h3>
+          <p>No release pages, no manual downloads: the app downloads the new installer with a progress bar, installs it, and restarts itself.</p>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-ico bg-purple">💻</div>
+          <h3>CLI + local API</h3>
+          <p>Everything is available from the command line (add, complete, projects, stats, sync) and through a local HTTP API you can protect with a token.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DESIGNS ================= -->
+  <section class="section alt" id="designs">
+    <div class="container">
+      <header class="section-head">
+        <p class="eyebrow">Designs</p>
+        <h2>Pick the look of your timer</h2>
+        <p class="section-sub">Four ready-made designs for the floating widget — switch between them in a second from Settings.</p>
+      </header>
+
+      <div class="design-tabs" role="tablist" aria-label="Widget designs">
+        <button role="tab" aria-selected="true" data-design-tab="pill" class="active">Glass Pill</button>
+        <button role="tab" aria-selected="false" data-design-tab="neon">Neon Card</button>
+        <button role="tab" aria-selected="false" data-design-tab="split">Split Flip</button>
+        <button role="tab" aria-selected="false" data-design-tab="retro">Typewriter</button>
+      </div>
+
+      <div class="design-stage">
+        <div class="wdemo stage-widget" id="stage-demo" data-design="pill">
+          <div class="wd-top">
+            <span class="wd-mode"><i></i> Focus</span>
+            <span class="wd-cycles"><b class="on"></b><b class="on"></b><b></b><b></b></span>
+          </div>
+          <div class="wd-main">
+            <div class="wd-text">
+              <p class="wd-task">Review the project code</p>
+              <p class="wd-cat">Project: Rakez · 3/6 tasks</p>
+            </div>
+            <div class="wd-clock">18:42</div>
+          </div>
+          <div class="wd-progress"><i style="width:63%"></i></div>
+          <div class="wd-actions">
+            <button type="button" class="wd-play">▶</button>
+            <button type="button">↺</button>
+            <button type="button">＋</button>
+          </div>
+        </div>
+        <p class="stage-caption" id="stage-caption">Glass Pill — calm frosted glass with a colored rim. The default.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= HOW ================= -->
+  <section class="section" id="how">
+    <div class="container">
+      <header class="section-head">
+        <p class="eyebrow">Getting started</p>
+        <h2>From download to focus in 3 steps</h2>
+      </header>
+
+      <ol class="steps">
+        <li class="step reveal">
+          <span class="step-num">1</span>
+          <h3>Download and install</h3>
+          <p>A single file for Windows 10/11 — no Python, no complicated setup. Your data lives in <code>%APPDATA%\Rakez\data</code> and survives every update.</p>
+        </li>
+        <li class="step reveal">
+          <span class="step-num">2</span>
+          <h3>Write your tasks and projects</h3>
+          <p>Add tasks, group them into projects to see progress, and connect Joplin or Google if you want automatic sync.</p>
+        </li>
+        <li class="step reveal">
+          <span class="step-num">3</span>
+          <h3>Press play and get to work</h3>
+          <p>The widget stays above every app. When a session ends you get a notification, and the time is logged in your analytics and calendar.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ================= INTEGRATIONS ================= -->
+  <section class="section alt" id="integrations">
+    <div class="container">
+      <header class="section-head">
+        <p class="eyebrow">Integrations</p>
+        <h2>Works with the tools you already use</h2>
+        <p class="section-sub">Every integration is optional — the app is fully functional without them.</p>
+      </header>
+
+      <div class="integrations">
+        <div class="integration reveal">
+          <div class="int-logo joplin">J</div>
+          <div>
+            <h3>Joplin</h3>
+            <p>Two-way task sync, tags, and due dates. A <code>dedupe</code> command cleans up duplicates.</p>
+          </div>
+        </div>
+        <div class="integration reveal">
+          <div class="int-logo gcal">31</div>
+          <div>
+            <h3>Google Calendar</h3>
+            <p>Every finished focus session is logged as an event in your calendar automatically.</p>
+          </div>
+        </div>
+        <div class="integration reveal">
+          <div class="int-logo gtask">✓</div>
+          <div>
+            <h3>Google Tasks</h3>
+            <p>Push and pull tasks between Rakez and Google Tasks — no copy-paste.</p>
+          </div>
+        </div>
+        <div class="integration reveal">
+          <div class="int-logo gemini">✦</div>
+          <div>
+            <h3>Gemini</h3>
+            <p>Powers the Hermes coach online. Without a key the app falls back to a built-in offline plan.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DOWNLOAD ================= -->
+  <section class="section" id="download">
+    <div class="container">
+      <div class="download-card">
+        <div class="download-copy">
+          <p class="eyebrow">Download</p>
+          <h2>Ready to start?</h2>
+          <p class="section-sub">Version <strong data-version>latest</strong> for Windows 10/11 · completely free · no sign-up.</p>
+
+          <div class="download-actions">
+            <a class="btn btn-primary btn-lg" href="https://github.com/mostafa-elwakil/lifebot/releases/latest" data-download-link>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>
+              <span data-download-label>Download installer</span>
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/mostafa-elwakil/lifebot/blob/main/README.en.md#-run-from-source--quickstart" target="_blank" rel="noopener">Run from source</a>
+          </div>
+
+          <dl class="download-facts">
+            <div><dt>Version</dt><dd data-version>—</dd></div>
+            <div><dt>Size</dt><dd data-size>—</dd></div>
+            <div><dt>Released</dt><dd data-date>—</dd></div>
+            <div><dt>License</dt><dd>Free for personal use</dd></div>
+          </dl>
+
+          <p class="fineprint">
+            The installer is not signed with a Code Signing certificate, so Windows SmartScreen may show
+            “Unknown publisher”. Press <strong>More info → Run anyway</strong>; the publisher in the file
+            properties is <strong>Mostafa Elwakil</strong>.
+          </p>
+        </div>
+
+        <div class="download-side">
+          <img src="../assets/icon-512.png" alt="Rakez icon" width="132" height="132" />
+          <p class="side-title">Rakez <span>ركّز</span></p>
+          <p class="side-sub">AI Coach &amp; Pomodoro</p>
+          <ul class="side-list">
+            <li>Windows 10/11 — 64-bit</li>
+            <li>No Python or dependencies</li>
+            <li>Fully offline capable</li>
+            <li>Built-in automatic updates</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FAQ ================= -->
+  <section class="section alt" id="faq">
+    <div class="container narrow">
+      <header class="section-head">
+        <p class="eyebrow">FAQ</p>
+        <h2>Questions everyone asks</h2>
+      </header>
+
+      <div class="faq">
+        <details>
+          <summary>Is it really free?</summary>
+          <p>Yes. No accounts and no subscriptions. The AI coach and Google options are optional and use your own keys, so Rakez never charges you.</p>
+        </details>
+        <details>
+          <summary>Is my data uploaded anywhere?</summary>
+          <p>No. Everything is stored in a local database on your PC. Sync only happens if you enable Joplin or Google yourself, and then it goes straight to the service you chose.</p>
+        </details>
+        <details>
+          <summary>Why does “Unknown publisher” appear when installing?</summary>
+          <p>Because the installer is not digitally signed with a paid Code Signing certificate. That does not mean it is unsafe; the publisher inside the file is <strong>Mostafa Elwakil</strong>. Choose <em>More info → Run anyway</em>.</p>
+        </details>
+        <details>
+          <summary>Does it work offline?</summary>
+          <p>Yes — the Pomodoro timer, tasks, projects, analytics, and designs all work fully offline. Internet is only needed for the Gemini coach, sync, and updates.</p>
+        </details>
+        <details>
+          <summary>How do I set up Google?</summary>
+          <p>Create an OAuth Client of type <em>Desktop app</em> in Google Cloud Console, enable Calendar and Tasks, add your email under <strong>Test users</strong>, then paste the Client ID and Secret into Settings and press <em>Authorize</em>, then <em>Test connection</em>.</p>
+        </details>
+        <details>
+          <summary>What happens to my data after an update?</summary>
+          <p>Nothing. Your data lives in <code>%APPDATA%\Rakez\data</code>, separate from the program files, so it stays exactly as it is after every update.</p>
+        </details>
+        <details>
+          <summary>Is there a Linux or macOS build?</summary>
+          <p>Linux: you can build from source with <code>packaging/build_linux.sh</code>. macOS is not officially supported yet — the app is built with PyQt6 so it should run, but there is no ready-made installer.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= CTA ================= -->
+  <section class="cta-band">
+    <div class="container cta-inner">
+      <div>
+        <h2>Start your first session now</h2>
+        <p>Install Rakez, write one task, and press play. The rest is easy.</p>
+      </div>
+      <a class="btn btn-primary btn-lg" href="#download" data-download-link>⬇️ Download free</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div class="footer-brand">
+      <img src="../assets/logo.svg" alt="" width="36" height="36" />
+      <div>
+        <strong>Rakez — ركّز</strong>
+        <p>An open-source personal productivity system.</p>
+      </div>
+    </div>
+
+    <nav class="footer-links" aria-label="Footer links">
+      <a href="https://github.com/mostafa-elwakil/lifebot" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/mostafa-elwakil/lifebot/releases" target="_blank" rel="noopener">All releases</a>
+      <a href="https://github.com/mostafa-elwakil/lifebot/blob/main/README.en.md" target="_blank" rel="noopener">Documentation</a>
+      <a href="https://github.com/mostafa-elwakil/lifebot/issues" target="_blank" rel="noopener">Report an issue</a>
+      <a href="../" hreflang="ar" lang="ar">العربية</a>
+    </nav>
+  </div>
+  <div class="container footer-bottom">
+    <p>© <span data-year>2026</span> Mostafa Elwakil — made with ❤️</p>
+    <p class="muted">Rakez is not affiliated with Google or Joplin.</p>
+  </div>
+</footer>
+
+<script src="../main.js" defer></script>
+</body>
+</html>

@@ -27,6 +27,8 @@ from core.settings import load_settings, save_settings, ACCENTS, DEFAULTS as SET
 from core.settings import (SOUND_NAMES, DESIGNS, BACKGROUNDS, THEMES,
                            THEME_BACKGROUNDS, valid_hex, is_light_color)
 from core.google_sync import GoogleSync
+from core.i18n import (LANGUAGES, detect_language, get_language, is_arabic,
+                       set_language, t, tf, translate_tree)
 from core import updater
 
 import yaml
@@ -338,7 +340,6 @@ class FloatingTimerWidget(QWidget):
         container.setObjectName("container")
         container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._float_container = container
-
         # NOTE: no QGraphicsDropShadowEffect — on Windows a blur shadow on a
         # translucent frameless window spams "UpdateLayeredWindowIndirect
         # failed (The parameter is incorrect)".
@@ -357,6 +358,7 @@ class FloatingTimerWidget(QWidget):
         main_layout.addLayout(grip_row)
         self._build_design()
         self._build_inline_panel(main_layout)
+        translate_tree(self)
 
     def _build_inline_panel(self, main_layout):
         """Attached slide-down panel: quick-add form AND inline notices.
@@ -380,9 +382,10 @@ class FloatingTimerWidget(QWidget):
         fv.addWidget(self.inline_title)
         frow = QHBoxLayout()
         self.inline_category = QComboBox()
-        self.inline_category.addItems(_CATS)
+        for cat in _CATS:
+            self.inline_category.addItem(t(cat), cat)
         frow.addWidget(self.inline_category, stretch=2)
-        ok_btn = QPushButton("Add")
+        ok_btn = QPushButton(t("Add"))
         ok_btn.clicked.connect(self._submit_inline_task)
         frow.addWidget(ok_btn, stretch=1)
         cancel_btn = QPushButton("✕")
@@ -451,7 +454,8 @@ class FloatingTimerWidget(QWidget):
         if not title:
             return
         try:
-            todo = self.storage.add_todo(title, self.inline_category.currentText())
+            todo = self.storage.add_todo(
+                title, self.inline_category.currentData() or "Deep Work")
         except ValueError:
             return
         self._hide_panel()
@@ -495,7 +499,7 @@ class FloatingTimerWidget(QWidget):
         self.task_label.setToolTip("Click to switch task")
         self.task_label.mousePressEvent = lambda _e: self._switch_task_menu()
 
-        self.cat_label = QLabel(f"🏷️ {self.current_category}")
+        self.cat_label = QLabel(f"🏷️ {t(self.current_category)}")
         self.cat_label.setFont(QFont("Segoe UI", 8))
         self.cat_label.setStyleSheet(f"color: {cat_color};")
 
@@ -579,11 +583,15 @@ class FloatingTimerWidget(QWidget):
         else:
             lay = QHBoxLayout(self._float_container)
         self._restyle(self.inline_panel.isVisible() if hasattr(self, "inline_panel") else False)
+        self._float_container.setLayoutDirection(
+            Qt.LayoutDirection.RightToLeft if is_arabic()
+            else Qt.LayoutDirection.LeftToRight)
         self.ring = None
         self.bar = None
         {"pill": self._build_pill, "neon": self._build_neon,
          "split": self._build_split, "retro": self._build_retro}[self.design](lay)
         self._refresh_progress()
+        translate_tree(self._float_container)
 
     def _build_pill(self, layout):
         """A — Glass Pill: ring + info + time on top, all buttons one bottom row."""
@@ -757,32 +765,34 @@ class FloatingTimerWidget(QWidget):
                 item.widget().deleteLater()
         todos = self.storage.get_todos()
         order, groups = [], {}
-        for t in todos:
-            c = t.get("category", "Deep Work")
+        for todo in todos:
+            c = todo.get("category", "Deep Work")
             if c not in groups:
                 groups[c] = []
                 order.append(c)
-            groups[c].append(t)
-        n_done = sum(1 for t in todos if t.get("completed"))
+            groups[c].append(todo)
+        n_done = sum(1 for todo in todos if todo.get("completed"))
         for cat in order:
-            head = QLabel(f"PHASE: {cat.upper()}")
+            head = QLabel(tf("PHASE: {cat}", cat=cat.upper()))
             head.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
             head.setStyleSheet(f"color: {self.RETRO_RED};")
             lay.addWidget(head)
-            for t in groups[cat]:
-                done = bool(t.get("completed"))
+            for todo in groups[cat]:
+                done = bool(todo.get("completed"))
                 box = "☒" if done else "☐"
-                cb = QCheckBox(f"{box}  {t.get('title')}")
+                cb = QCheckBox(f"{box}  {todo.get('title')}")
                 cb.setFont(QFont("Consolas", 9))
                 cb.setChecked(done)
                 cb.setStyleSheet(
                     f"QCheckBox {{ color: {self.RETRO_INK}; spacing: 4px; }}")
-                cb.setProperty("todo_id", t.get("id"))
+                cb.setProperty("todo_id", todo.get("id"))
                 cb.toggled.connect(self._toggle_retro_task)
                 lay.addWidget(cb)
         lay.addStretch()
         total = len(todos)
-        self.retro_count.setText(f"{n_done}/{total} done" if total else "no tasks yet")
+        self.retro_count.setText(
+            tf("{n_done}/{total} done", n_done=n_done, total=total) if total
+            else t("no tasks yet"))
         self._refresh_progress()
 
     def _toggle_retro_task(self, checked: bool):
@@ -810,16 +820,16 @@ class FloatingTimerWidget(QWidget):
         """Mark the current widget task as done, then auto-advance."""
         name = (self.current_task or "").strip()
         if not name or name == "Select a Task":
-            self.show_notice("No task selected — pick one first.")
+            self.show_notice(t("No task selected — pick one first."))
             return
         try:
             done_ok = self.storage.set_completed(name, True)
         except Exception:
             done_ok = False
         if not done_ok:
-            self.show_notice(f"⚠ Could not complete '{name}'.")
+            self.show_notice(tf("⚠ Could not complete '{name}'.", name=name))
             return
-        self.show_notice(f"✓ '{name}' completed!")
+        self.show_notice(tf("✓ '{name}' completed!", name=name))
         if self.is_running:
             self.toggle_timer()  # pause — fresh period ahead
         remaining = [t for t in self.storage.get_todos() if not t.get("completed")]
@@ -842,7 +852,7 @@ class FloatingTimerWidget(QWidget):
             "QMenu::item:selected { background-color: #7aa2f7; color: #1a1b26; }")
         open_tasks = [t for t in self.storage.get_todos() if not t.get("completed")]
         if not open_tasks:
-            act = menu.addAction("(no open tasks)")
+            act = menu.addAction(t("(no open tasks)"))
             act.setEnabled(False)
         for t in open_tasks[:20]:
             label = f"{t.get('title')}  [{t.get('category')}]"
@@ -862,19 +872,20 @@ class FloatingTimerWidget(QWidget):
         self.current_category = category
         self.mode = "focus"
         self.task_label.setText(task_name[:20] + "..." if len(task_name) > 20 else task_name)
-        self.cat_label.setText(f"🏷️ {category}")
-        self.mode_label.setText("🎯 FOCUS")
+        self.cat_label.setText(f"🏷️ {t(category)}")
+        self.mode_label.setText(t("🎯 FOCUS"))
         self.total_seconds = duration_min * 60
         self.remaining_seconds = self.total_seconds
         self._update_time_display()
         self._refresh_retro_list()
+        translate_tree(self._float_container)
 
     def start_break(self, kind="short_break", minutes: int | None = None):
         if minutes is None:
             minutes = DEFAULTS["short_break"] if kind == "short_break" else DEFAULTS["long_break"]
         self.mode = kind
         label = "☕ SHORT BREAK" if kind == "short_break" else "🌴 LONG BREAK"
-        self.mode_label.setText(label)
+        self.mode_label.setText(t(label))
         self.total_seconds = minutes * 60
         self.remaining_seconds = self.total_seconds
         self._update_time_display()
@@ -916,7 +927,7 @@ class FloatingTimerWidget(QWidget):
             self.timer.stop()
             self.is_running = False
             self.toggle_btn.setText("▶")
-            self.time_label.setText("DONE!")
+            self.time_label.setText(t("DONE!"))
             play_done_sound(QApplication.instance(), self.sound)
             finished_mode = self.mode
             payload = {
@@ -989,7 +1000,12 @@ class RakezMainWindow(QMainWindow):
             client_id=self.app_settings.get("google_client_id", ""),
             client_secret=self.app_settings.get("google_client_secret", ""))
         self.theme = self.app_settings.get("theme", "dark")
-        self.setWindowTitle("Rakez ركّز - AI Coach & Pomodoro")
+        lang = self.app_settings.get("language") or ""
+        if lang not in ("en", "ar"):
+            lang = detect_language()
+        self.app_settings["language"] = lang
+        set_language(lang)
+        self.setWindowTitle(t("Rakez ركّز - AI Coach & Pomodoro"))
         self.resize(880, 640)
 
         self.floating_widget = FloatingTimerWidget(self.storage)
@@ -1081,8 +1097,37 @@ class RakezMainWindow(QMainWindow):
                         break
         save_settings(DATA_DIR, self.app_settings)
 
+    def _change_language(self, *_):
+        """Settings dropdown → rebuild the whole dashboard in that language."""
+        code = self.lang_combo.currentData()
+        if code not in ("en", "ar") or code == get_language():
+            return
+        set_language(code)
+        self.app_settings["language"] = code
+        save_settings(DATA_DIR, self.app_settings)
+        self.setWindowTitle(t("Rakez ركّز - AI Coach & Pomodoro"))
+        # Qt owns the old central widget: setCentralWidget() drops it for us
+        self._init_ui()
+        self._apply_theme()
+        try:
+            self.floating_widget._build_design()
+            translate_tree(self.floating_widget)
+        except Exception:
+            pass
+        try:
+            if self.tray is not None:
+                self.tray.hide()
+                self.tray.deleteLater()
+                self.tray = None
+                self._init_tray()
+        except Exception:
+            pass
+
     def _init_ui(self):
         main_widget = QWidget()
+        main_widget.setLayoutDirection(
+            Qt.LayoutDirection.RightToLeft if is_arabic()
+            else Qt.LayoutDirection.LeftToRight)
         layout = QVBoxLayout(main_widget)
 
         header = QHBoxLayout()
@@ -1117,6 +1162,7 @@ class RakezMainWindow(QMainWindow):
         layout.addWidget(tabs)
 
         self.setCentralWidget(main_widget)
+        translate_tree(self)
 
     # ---- tabs ----
     def _create_pomodoro_tab(self):
@@ -1192,10 +1238,12 @@ class RakezMainWindow(QMainWindow):
         self.new_task_input.setPlaceholderText("New task title... (Enter to add)")
         self.new_task_input.returnPressed.connect(self._add_task)
         self.category_combo = QComboBox()
-        self.category_combo.addItems(CATEGORIES)
+        for cat in CATEGORIES:
+            self.category_combo.addItem(t(cat), cat)
         self.priority_combo = QComboBox()
-        self.priority_combo.addItems(["low", "medium", "high"])
-        self.priority_combo.setCurrentText("medium")
+        for pri in ("low", "medium", "high"):
+            self.priority_combo.addItem(t(pri), pri)
+        self.priority_combo.setCurrentIndex(1)
         self.project_combo = QComboBox()
         add_btn = QPushButton("➕ Add")
         add_btn.clicked.connect(self._add_task)
@@ -1306,6 +1354,19 @@ class RakezMainWindow(QMainWindow):
         theme_hint.setStyleSheet("color: #6b7280;")
         theme_row.addWidget(theme_hint, stretch=1)
         layout.addLayout(theme_row)
+
+        # --- language ---
+        layout.addWidget(QLabel("🌐 Language:"))
+        lang_row = QHBoxLayout()
+        self.lang_combo = QComboBox()
+        for label, code in LANGUAGES.items():
+            self.lang_combo.addItem(label, code)
+        self.lang_combo.setCurrentIndex(
+            max(0, self.lang_combo.findData(get_language())))
+        self.lang_combo.currentIndexChanged.connect(self._change_language)
+        lang_row.addWidget(self.lang_combo)
+        lang_row.addStretch()
+        layout.addLayout(lang_row)
 
         # --- widget size ---
         layout.addWidget(QLabel("🔳 Floating widget size:"))
@@ -1524,69 +1585,74 @@ class RakezMainWindow(QMainWindow):
             return
         self._update_silent = silent
         self.update_btn.setEnabled(False)
-        self.update_btn.setText("⏳ Checking...")
-        self.update_label.setText("Checking GitHub for updates...")
+        self.update_btn.setText(t("⏳ Checking..."))
+        self.update_label.setText(t("Checking GitHub for updates..."))
         self._update_worker = _UpdateChecker(self)
         self._update_worker.checked.connect(self._on_update_checked)
         self._update_worker.start()
 
     def _on_update_checked(self, info: dict):
         self.update_btn.setEnabled(True)
-        self.update_btn.setText("🔄 Check for updates")
+        self.update_btn.setText(t("🔄 Check for updates"))
         cur = info.get("current", updater.APP_VERSION)
         if not info.get("ok"):
-            msg = info.get("error") or "Unknown error"
-            self.update_label.setText(f"⚠ Update check failed: {msg}")
+            msg = info.get("error") or t("Unknown error")
+            self.update_label.setText(tf("⚠ Update check failed: {msg}", msg=msg))
             self.update_label.setStyleSheet("color: #e0af68;")
             return
         latest = info.get("latest") or cur
         self._update_info = info
         if info.get("update_available"):
-            self.update_label.setText(f"🆕 New version available: {latest} (you have {cur})")
+            self.update_label.setText(
+                tf("🆕 New version available: {latest} (you have {cur})",
+                   latest=latest, cur=cur))
             self.update_label.setStyleSheet("color: #9ece6a; font-weight: bold;")
             has_installer = bool(info.get("asset_url"))
             self.update_install_btn.setVisible(has_installer)
             self.update_install_btn.setEnabled(True)
-            self.update_install_btn.setText("⬇️ Download & Install update")
+            self.update_install_btn.setText(t("⬇️ Download & Install update"))
             if has_installer:
-                self._notify("Rakez", f"New version {latest} is ready — open Settings and press Download & Install.")
+                self._notify(t("Rakez"),
+                             f"New version {latest} is ready — open Settings and press Download & Install.")
             else:
-                self._notify("Rakez", f"New version {latest} is available, but the release has no installer attached.")
+                self._notify(t("Rakez"),
+                             f"New version {latest} is available, but the release has no installer attached.")
         else:
-            self.update_label.setText(f"✓ Up to date — {cur} is the latest release")
+            self.update_label.setText(tf("✓ Up to date — {cur} is the latest release", cur=cur))
             self.update_label.setStyleSheet("color: #565f89;")
             self.update_install_btn.setVisible(False)
             if not getattr(self, "_update_silent", False):
-                QMessageBox.information(self, "Updates",
-                                        f"You are on the latest version ({cur}).")
+                QMessageBox.information(self, t("Updates"),
+                                        tf("You are on the latest version ({cur}).", cur=cur))
         self._update_silent = False
 
     # ---- download & install update ----
     def _download_and_install_update(self):
         info = getattr(self, "_update_info", {}) or {}
         url = info.get("asset_url") or ""
-        latest = info.get("latest") or "new version"
+        latest = info.get("latest") or t("new version")
         if not url:
             QMessageBox.warning(
-                self, "Updates",
-                "This release has no installer file attached.\n"
-                "Ask the publisher to attach Rakez-Setup-*.exe to the GitHub release.")
+                self, t("Updates"),
+                t("This release has no installer file attached.\n"
+                  "Ask the publisher to attach Rakez-Setup-*.exe to the GitHub release."))
             return
         size_mb = (info.get("asset_size") or 0) / (1024 * 1024)
         detail = f" ({size_mb:.0f} MB)" if size_mb else ""
         if QMessageBox.question(
-                self, "Install update",
-                f"Download and install Rakez {latest}{detail}?\n\n"
-                "The installer will run silently and Rakez will close to finish.\n"
-                "Your tasks and settings are kept.",
+                self, t("Install update"),
+                tf("Download and install Rakez {latest}{detail}?\n\n"
+                   "The installer will run silently and Rakez will close to finish.\n"
+                   "Your tasks and settings are kept.",
+                   latest=latest, detail=detail),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         ) != QMessageBox.StandardButton.Yes:
             return
         if getattr(self, "_download_worker", None) is not None and self._download_worker.isRunning():
             return
         self.update_install_btn.setEnabled(False)
-        self.update_install_btn.setText("⏳ Downloading… 0%")
-        self.update_label.setText(f"Downloading Rakez {latest}…")
+        self.update_install_btn.setText(tf("⏳ Downloading… {pct}%", pct=0))
+        self.update_label.setText(tf("Downloading Rakez {latest}…", latest=latest))
         self.update_label.setStyleSheet("color: #7aa2f7;")
         self._download_worker = _UpdateDownloader(url, info.get("asset_name") or "", self)
         self._download_worker.progress.connect(self._on_download_progress)
@@ -1595,32 +1661,34 @@ class RakezMainWindow(QMainWindow):
 
     def _on_download_progress(self, pct: int):
         if pct < 0:
-            self.update_install_btn.setText("⏳ Downloading…")
+            self.update_install_btn.setText(t("⏳ Downloading…"))
         else:
-            self.update_install_btn.setText(f"⏳ Downloading… {pct}%")
+            self.update_install_btn.setText(tf("⏳ Downloading… {pct}%", pct=pct))
 
     def _on_download_done(self, res: dict):
         self.update_install_btn.setEnabled(True)
-        self.update_install_btn.setText("⬇️ Download & Install update")
+        self.update_install_btn.setText(t("⬇️ Download & Install update"))
         if not res.get("ok"):
-            self.update_label.setText(f"⚠ Download failed: {res.get('error', 'unknown')}")
+            err = res.get("error", t("Unknown error"))
+            self.update_label.setText(tf("⚠ Download failed: {err}", err=err))
             self.update_label.setStyleSheet("color: #e0af68;")
-            QMessageBox.warning(self, "Update failed",
-                                f"Could not download the update:\n\n{res.get('error', 'unknown')}")
+            QMessageBox.warning(self, t("Update failed"),
+                                tf("Could not download the update:\n\n{err}", err=err))
             return
         path = res.get("path", "")
-        self.update_label.setText(f"✓ Downloaded — installing and restarting…")
+        self.update_label.setText(t("✓ Downloaded — installing and restarting…"))
         self.update_label.setStyleSheet("color: #9ece6a;")
         if not updater.run_installer(path):
-            self.update_label.setText("⚠ Could not start the installer")
+            self.update_label.setText(t("⚠ Could not start the installer"))
             self.update_label.setStyleSheet("color: #e0af68;")
-            QMessageBox.warning(self, "Update",
-                                f"The installer could not be started.\n\nYou can run it manually:\n{path}")
+            QMessageBox.warning(self, t("Update"),
+                                tf("The installer could not be started.\n\n"
+                                   "You can run it manually:\n{path}", path=path))
             return
         QMessageBox.information(
-            self, "Installing update",
-            "Rakez will close now and the installer will finish the update.\n"
-            "Open Rakez again after a few seconds.")
+            self, t("Installing update"),
+            t("Rakez will close now and the installer will finish the update.\n"
+              "Open Rakez again after a few seconds."))
         self._quit_app()
 
     def _save_settings(self):
@@ -1664,9 +1732,10 @@ class RakezMainWindow(QMainWindow):
         self.opacity_spin.blockSignals(True)
         self.opacity_spin.setValue(int(s["opacity"]))
         self.opacity_spin.blockSignals(False)
-        mode = "🟢 Gemini AI" if self.coach.online else "🟡 Offline coach"
+        mode = t("🟢 Gemini AI") if self.coach.online else t("🟡 Offline coach")
         self.status_label.setText(f"{mode}  •  Joplin: {self.joplin.status()}")
-        self.settings_status.setText("✓ saved to settings.json" if ok else "⚠ save failed")
+        self.settings_status.setText(t("✓ saved to settings.json") if ok
+                                     else t("⚠ save failed"))
 
     def _apply_google_creds_from_ui(self) -> bool:
         """Pick up Client ID/Secret typed in Settings (no Save needed) and persist."""
@@ -1683,70 +1752,75 @@ class RakezMainWindow(QMainWindow):
         self.gsync.client_secret = sec or os.getenv("GOOGLE_CLIENT_SECRET", "")
         if not (self.gsync.client_id and self.gsync.client_secret):
             QMessageBox.warning(
-                self, "Google",
-                "Client ID and Client Secret are required.\n\n"
-                "Google Cloud Console → APIs & Services → Credentials →\n"
-                "Create OAuth client ID → Desktop app → copy both values here.")
+                self, t("Google"),
+                t("Client ID and Client Secret are required.\n\n"
+                  "Google Cloud Console → APIs & Services → Credentials →\n"
+                  "Create OAuth client ID → Desktop app → copy both values here."))
             return False
         return True
 
     def _authorize_google(self):
         if not self._apply_google_creds_from_ui():
             return
-        self.google_status_label.setText("⏳ opening browser for Google authorization...")
+        self.google_status_label.setText(t("⏳ opening browser for Google authorization..."))
         QApplication.processEvents()
         if self.gsync.authorize():
-            self.google_status_label.setText("✓ Google connected")
-            QMessageBox.information(self, "Google", "Connected! Tokens saved locally.")
+            self.google_status_label.setText(t("✓ Google connected"))
+            QMessageBox.information(self, t("Google"), t("Connected! Tokens saved locally."))
         else:
-            self.google_status_label.setText(f"⚠ Google: {self.gsync.last_error}")
-            QMessageBox.warning(self, "Google", f"Authorization failed:\n{self.gsync.last_error}")
+            self.google_status_label.setText(tf("⚠ Google: {err}", err=self.gsync.last_error))
+            QMessageBox.warning(self, t("Google"),
+                                tf("Authorization failed:\n{err}", err=self.gsync.last_error))
 
     def _test_google_connection(self):
         """Real API round-trip: Tasks list + Calendar primary (no writes)."""
         if not self._apply_google_creds_from_ui():
             return
-        self.google_status_label.setText("⏳ testing Google connection...")
+        self.google_status_label.setText(t("⏳ testing Google connection..."))
         QApplication.processEvents()
         res = self.gsync.test_connection()
         if res.get("ok"):
             self.google_status_label.setText(f"✓ {res['message']}")
-            QMessageBox.information(self, "Google Test", f"Connection OK\n\n{res['message']}")
+            QMessageBox.information(self, t("Google Test"),
+                                    tf("Connection OK\n\n{msg}", msg=res['message']))
         elif "authoriz" in res["message"].lower():
             # configured but no token yet → offer the browser flow right away
             if QMessageBox.question(
-                    self, "Google Test",
-                    f"{res['message']}\n\nAuthorize now?",
+                    self, t("Google Test"),
+                    tf("{msg}\n\nAuthorize now?", msg=res['message']),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             ) == QMessageBox.StandardButton.Yes:
                 self._authorize_google()
         else:
-            self.google_status_label.setText(f"⚠ Google: {res['message']}")
-            QMessageBox.warning(self, "Google Test", f"Connection failed:\n\n{res['message']}")
+            self.google_status_label.setText(tf("⚠ Google: {err}", err=res['message']))
+            QMessageBox.warning(self, t("Google Test"),
+                                tf("Connection failed:\n\n{msg}", msg=res['message']))
 
     def _push_selected_to_google(self):
         key = self._selected_todo_key()
         if not key:
             return
-        todos = {t["id"]: t for t in self.storage.get_todos()}
-        t = todos.get(key)
-        if not t:
+        todos = {todo["id"]: todo for todo in self.storage.get_todos()}
+        todo = todos.get(key)
+        if not todo:
             return
-        res = self.gsync.push_task(t["title"], f"Category: {t.get('category','')}")
-        self.google_status_label.setText("✓ in Google Tasks" if res
-                                         else f"⚠ Google: {self.gsync.last_error or self.gsync.status()}")
+        res = self.gsync.push_task(todo["title"], f"Category: {todo.get('category','')}")
+        self.google_status_label.setText(
+            t("✓ in Google Tasks") if res
+            else tf("⚠ Google: {err}", err=self.gsync.last_error or self.gsync.status()))
 
     def _pull_from_google(self):
         incoming = self.gsync.pull_tasks()
         if not incoming and self.gsync.last_error:
-            self.google_status_label.setText(f"⚠ Google: {self.gsync.last_error}")
+            self.google_status_label.setText(tf("⚠ Google: {err}", err=self.gsync.last_error))
             return
         res = self.storage.import_todos(incoming)
         if res.get("added"):
             self._load_todos_list()
             self._refresh_task_dropdown()
         self.google_status_label.setText(
-            f"✓ Google has {len(incoming)} open — pulled {res['added']}")
+            tf("✓ Google has {n} open — pulled {added}",
+               n=len(incoming), added=res['added']))
 
     def _init_tray(self):
         self.tray = None
@@ -1761,9 +1835,9 @@ class RakezMainWindow(QMainWindow):
                 except Exception:
                     pass
                 menu = QMenu()
-                show_act = QAction("Show Dashboard", self)
+                show_act = QAction(t("Show Dashboard"), self)
                 show_act.triggered.connect(self.show_dashboard)
-                quit_act = QAction("Quit", self)
+                quit_act = QAction(t("Quit"), self)
                 quit_act.triggered.connect(self._quit_app)
                 menu.addAction(show_act)
                 menu.addAction(quit_act)
@@ -1899,7 +1973,7 @@ class RakezMainWindow(QMainWindow):
         has_unassigned = any(t.get("project_id", "") == "" for t in todos)
         if has_unassigned:
             cnt = sum(1 for t in todos if not t.get("project_id") and not t.get("completed"))
-            item = make_item(f"📂 Ungrouped — {cnt} open", None)
+            item = make_item(tf("📂 Ungrouped — {n} open", n=cnt), None)
             f = item.font()
             f.setBold(True)
             item.setFont(f)
@@ -1909,26 +1983,27 @@ class RakezMainWindow(QMainWindow):
                     add_task(t)
 
     def _add_project(self):
-        name, ok = QInputDialog.getText(self, "New Project", "Project name:")
+        name, ok = QInputDialog.getText(self, t("New Project"), t("Project name:"))
         if not (ok and (name or "").strip()):
             return
         try:
             p = self.storage.create_project(name)
         except ValueError as e:
-            QMessageBox.warning(self, "New Project", str(e))
+            QMessageBox.warning(self, t("New Project"), str(e))
             return
         self._load_todos_list()
 
     def _delete_project(self):
         pid = self._selected_project_id()
         if not pid:
-            QMessageBox.information(self, "Delete Project",
-                                    "Select a project header row first (📁 row).")
+            QMessageBox.information(self, t("Delete Project"),
+                                    t("Select a project header row first (📁 row)."))
             return
         p = self.storage.get_project(pid)
         if p and QMessageBox.question(
-                self, "Delete Project",
-                f"Delete project '{p['name']}'?\nIts tasks stay but become ungrouped.",
+                self, t("Delete Project"),
+                tf("Delete project '{name}'?\nIts tasks stay but become ungrouped.",
+                   name=p['name']),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         ) == QMessageBox.StandardButton.Yes:
             self.storage.delete_project(p["id"])
@@ -1937,41 +2012,42 @@ class RakezMainWindow(QMainWindow):
     def _move_selected_to_project(self):
         key = self._selected_todo_key()
         if not key:
-            QMessageBox.information(self, "Move to Project",
-                                    "Select a task row first (not a project header).")
+            QMessageBox.information(self, t("Move to Project"),
+                                    t("Select a task row first (not a project header)."))
             return
         projects = self.storage.get_projects()
         names = [p["name"] for p in projects]
         name, ok = QInputDialog.getItem(
-            self, "Move to Project", "Choose project (it stays selected after):",
+            self, t("Move to Project"), t("Choose project (it stays selected after):"),
             names, 0, True)  # editable → type a new project name
         if not (ok and (name or "").strip()):
             return
         try:
             self.storage.update_todo(key, {"project_id": name.strip()})
         except ValueError as e:
-            QMessageBox.warning(self, "Move to Project", str(e))
+            QMessageBox.warning(self, t("Move to Project"), str(e))
         self._load_todos_list()
         self._refresh_task_dropdown()
 
     def _add_task(self):
-        t = self.new_task_input.text().strip()
-        c = self.category_combo.currentText()
-        p = self.priority_combo.currentText()
+        title = self.new_task_input.text().strip()
+        c = self.category_combo.currentData() or self.category_combo.currentText()
+        p = self.priority_combo.currentData() or "medium"
         pid = ""
         if hasattr(self, "project_combo"):
             pid = self.project_combo.currentData() or ""
-        if t:
-            self.storage.add_todo(t, c, priority=p, project_id=pid)
+        if title:
+            self.storage.add_todo(title, c, priority=p, project_id=pid)
             # إضافة المهمة لـ Joplin تلقائياً — must never crash the GUI
             try:
-                created = self.joplin.create_todo(title=t, body=f"Category: {c}\nPriority: {p}",
+                created = self.joplin.create_todo(title=title, body=f"Category: {c}\nPriority: {p}",
                                                   folder_name=self.joplin_folder, tags=self.joplin_tags)
                 if created is None and self.joplin.available:
                     print(f"[joplin] failed: {self.joplin.last_error}")
-                    self.joplin_status_label.setText(f"⚠ Joplin: {self.joplin.friendly_error()}")
+                    self.joplin_status_label.setText(
+                        tf("⚠ Joplin: {err}", err=self.joplin.friendly_error()))
                 elif created is not None:
-                    self.joplin_status_label.setText("✓ in Joplin All-Tasks")
+                    self.joplin_status_label.setText(t("✓ in Joplin All-Tasks"))
             except Exception as e:
                 print(f"[joplin] error: {e}")
 
@@ -1998,17 +2074,18 @@ class RakezMainWindow(QMainWindow):
 
     def _clear_completed(self):
         n = self.storage.clear_completed()
-        QMessageBox.information(self, "Cleared", f"Removed {n} completed tasks.")
+        QMessageBox.information(self, t("Cleared"), tf("Removed {n} completed tasks.", n=n))
         self._load_todos_list()
         self._refresh_task_dropdown()
 
     def _sync_all_to_joplin(self):
         """Push every open Rakez task into Joplin (skips duplicates)."""
         if not self.joplin.available:
-            self.joplin_status_label.setText("⚠ Joplin not configured — set JOPLIN_TOKEN")
-            QMessageBox.warning(self, "Joplin", "Joplin is not configured.\nSet JOPLIN_TOKEN in your .env file.")
+            self.joplin_status_label.setText(t("⚠ Joplin not configured — set JOPLIN_TOKEN"))
+            QMessageBox.warning(self, t("Joplin"),
+                                t("Joplin is not configured.\nSet JOPLIN_TOKEN in your .env file."))
             return
-        self.joplin_status_label.setText("⏳ syncing to Joplin...")
+        self.joplin_status_label.setText(t("⏳ syncing to Joplin..."))
         QApplication.processEvents()
         try:
             res = self.joplin.sync_open_todos(self.storage.get_todos(),
@@ -2017,26 +2094,35 @@ class RakezMainWindow(QMainWindow):
             res = {"created": 0, "skipped": 0, "error": str(e)[:200]}
         if res.get("created") or res.get("updated"):
             self.joplin_status_label.setText(
-                f"✓ {res['created']} added, {res['updated']} fixed, {res['skipped']} ok")
-            QMessageBox.information(self, "Joplin Sync",
-                f"Added {res['created']} task(s), fixed {res['updated']} (tags/due date).\n"
-                f"{res['skipped']} already fine.\n"
-                "Check the Joplin notebook + All-Tasks board.")
+                tf("✓ {created} added, {updated} fixed, {skipped} ok",
+                   created=res['created'], updated=res['updated'],
+                   skipped=res['skipped']))
+            QMessageBox.information(
+                self, t("Joplin Sync"),
+                tf("Added {created} task(s), fixed {updated} (tags/due date).\n"
+                   "{skipped} already fine.\n"
+                   "Check the Joplin notebook + All-Tasks board.",
+                   created=res['created'], updated=res['updated'],
+                   skipped=res['skipped']))
         elif res.get("error"):
-            self.joplin_status_label.setText(f"⚠ Joplin: {self.joplin.friendly_error()}")
-            QMessageBox.warning(self, "Joplin Sync", f"Sync failed:\n{self.joplin.friendly_error()}")
+            self.joplin_status_label.setText(
+                tf("⚠ Joplin: {err}", err=self.joplin.friendly_error()))
+            QMessageBox.warning(self, t("Joplin Sync"),
+                                tf("Sync failed:\n{err}", err=self.joplin.friendly_error()))
         else:
-            self.joplin_status_label.setText(f"✓ everything already in All-Tasks ({res['skipped']})")
+            self.joplin_status_label.setText(
+                tf("✓ everything already in All-Tasks ({n})", n=res['skipped']))
 
     def _pull_from_joplin(self, silent: bool = False) -> dict:
         """Import todos created in Joplin into Rakez. Never crashes."""
         if not self.joplin.available:
             if not silent:
-                self.joplin_status_label.setText("⚠ Joplin not configured — set JOPLIN_TOKEN")
-                QMessageBox.warning(self, "Joplin", "Joplin is not configured.\nSet JOPLIN_TOKEN in your .env file.")
+                self.joplin_status_label.setText(t("⚠ Joplin not configured — set JOPLIN_TOKEN"))
+                QMessageBox.warning(self, t("Joplin"),
+                                    t("Joplin is not configured.\nSet JOPLIN_TOKEN in your .env file."))
             return {"added": 0, "skipped": 0}
         if not silent:
-            self.joplin_status_label.setText("⏳ pulling from Joplin...")
+            self.joplin_status_label.setText(t("⏳ pulling from Joplin..."))
             QApplication.processEvents()
         try:
             incoming = self.joplin.pull_todos(folder_name=self.joplin_folder)
@@ -2046,29 +2132,34 @@ class RakezMainWindow(QMainWindow):
                 self._refresh_task_dropdown()
             if not silent:
                 if not incoming and self.joplin.last_error:
-                    self.joplin_status_label.setText(f"⚠ Joplin: {self.joplin.friendly_error()}")
+                    self.joplin_status_label.setText(
+                        tf("⚠ Joplin: {err}", err=self.joplin.friendly_error()))
                 else:
                     self.joplin_status_label.setText(
-                        f"✓ Joplin has {len(incoming)} todos in '{self.joplin_folder}' — "
-                        f"pulled {res['added']} ({res['skipped']} already here)")
+                        tf("✓ Joplin has {n} todos in '{folder}' — pulled {added} ({skipped} already here)",
+                           n=len(incoming), folder=self.joplin_folder,
+                           added=res['added'], skipped=res['skipped']))
                 if res.get("added"):
-                    QMessageBox.information(self, "Joplin Pull",
-                        f"Imported {res['added']} task(s) from Joplin.")
+                    QMessageBox.information(
+                        self, t("Joplin Pull"),
+                        tf("Imported {n} task(s) from Joplin.", n=res['added']))
                 elif not incoming:
-                    QMessageBox.information(self, "Joplin Pull",
-                        f"No to-dos found in Joplin notebook '{self.joplin_folder}'.\n"
-                        "Make sure the to-do is inside that notebook\n"
-                        "(not in another notebook) and press Synchronise in Joplin first.")
+                    QMessageBox.information(
+                        self, t("Joplin Pull"),
+                        tf("No to-dos found in Joplin notebook '{folder}'.\n"
+                           "Make sure the to-do is inside that notebook\n"
+                           "(not in another notebook) and press Synchronise in Joplin first.",
+                           folder=self.joplin_folder))
             return res
         except Exception as e:
             if not silent:
-                self.joplin_status_label.setText(f"⚠ Joplin pull: {e}")
+                self.joplin_status_label.setText(tf("⚠ Joplin pull: {err}", err=e))
             return {"added": 0, "skipped": 0}
 
     def _start_pomodoro(self):
         data = self.task_selector.currentData()
         if not data:
-            QMessageBox.warning(self, "Warning", "Please select a task first!")
+            QMessageBox.warning(self, t("Warning"), t("Please select a task first!"))
             return
         dur = self.duration_spin.value()
         self.floating_widget.set_task(data["title"], data["category"], dur)
@@ -2078,23 +2169,28 @@ class RakezMainWindow(QMainWindow):
 
     def _on_session_finished(self, session):
         self.storage.log_session(session)
-        self._notify("Rakez", f"Session '{session['task']}' recorded ({session['duration_min']}m).")
+        self._notify(t("Rakez"),
+                     tf("Session '{task}' recorded ({min}m).",
+                        task=session['task'], min=session['duration_min']))
         if session.get("kind") == "focus":
             # optional: log to Google Calendar (never blocks/crashes)
             try:
                 if getattr(self, "cal_check", None) is not None and self.cal_check.isChecked():
                     ev = self.gsync.log_focus_event(session["task"], session.get("duration_min", 25))
                     if ev:
-                        self._notify("Rakez", "Logged to Google Calendar 📅")
+                        self._notify(t("Rakez"), t("Logged to Google Calendar 📅"))
             except Exception:
                 pass
-            self.cycle_label.setText(f"Cycles completed: {self.floating_widget.cycles_done} (long break every 4)")
+            self.cycle_label.setText(
+                tf("Cycles completed: {n} (long break every 4)",
+                   n=self.floating_widget.cycles_done))
             # auto-suggest break — attached to the widget, fallback to popup
             minutes = self.break_spin.value() if hasattr(self, "break_spin") else DEFAULTS["short_break"]
             if self.floating_widget.cycles_done % 4 == 0:
                 self.floating_widget.start_break("long_break", DEFAULTS["long_break"])
                 self._widget_or_popup(
-                    f"🎉 Focus '{session['task']}' logged! Long break started.")
+                    tf("🎉 Focus '{task}' logged! Long break started.",
+                       task=session['task']))
             else:
                 self._pending_break_min = minutes
                 try:
@@ -2103,15 +2199,16 @@ class RakezMainWindow(QMainWindow):
                     pass
                 self.floating_widget.notice_answered.connect(self._on_break_answer)
                 if not self._widget_or_popup(
-                        f"🎉 Session '{session['task']}' recorded! Start {minutes}-min break?",
-                        actions=[("Yes", True), ("No", False)]):
+                        tf("🎉 Session '{task}' recorded! Start {min}-min break?",
+                           task=session['task'], min=minutes),
+                        actions=[(t("Yes"), True), (t("No"), False)]):
                     # widget hidden → classic popup already asked; clean up
                     try:
                         self.floating_widget.notice_answered.disconnect()
                     except Exception:
                         pass
         else:
-            self._widget_or_popup("☕ Break finished! Ready for next focus?")
+            self._widget_or_popup(t("☕ Break finished! Ready for next focus?"))
         self._load_analytics()
         self._load_todos_list()
         self._refresh_task_dropdown()
@@ -2122,11 +2219,11 @@ class RakezMainWindow(QMainWindow):
             self.floating_widget.show_notice(text, actions=actions)
             return True
         if actions:
-            reply = QMessageBox.question(self, "Rakez", text,
+            reply = QMessageBox.question(self, t("Rakez"), text,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             self._on_break_answer(reply == QMessageBox.StandardButton.Yes)
         else:
-            QMessageBox.information(self, "Rakez", text)
+            QMessageBox.information(self, t("Rakez"), text)
         return False
 
     def _on_break_answer(self, value):
@@ -2139,19 +2236,20 @@ class RakezMainWindow(QMainWindow):
             self.floating_widget.start_break("short_break", minutes)
 
     def _plan_morning(self):
-        self.coach_output.setPlainText("Hermes is thinking... ⏳")
+        self.coach_output.setPlainText(t("Hermes is thinking... ⏳"))
         QApplication.processEvents()
         self.coach_output.setMarkdown(self.coach.morning_plan(self.storage.get_todos()))
 
     def _resolve_snag(self):
-        excuse, ok = QInputDialog.getText(self, "Resolve Snag", "What obstacle or excuse are you facing?")
+        excuse, ok = QInputDialog.getText(self, t("Resolve Snag"),
+                                          t("What obstacle or excuse are you facing?"))
         if ok and excuse:
-            self.coach_output.setPlainText("Hermes is thinking... ⏳")
+            self.coach_output.setPlainText(t("Hermes is thinking... ⏳"))
             QApplication.processEvents()
             self.coach_output.setMarkdown(self.coach.resolve_snag(excuse, self.storage.get_todos()))
 
     def _daily_review(self):
-        self.coach_output.setPlainText("Hermes is thinking... ⏳")
+        self.coach_output.setPlainText(t("Hermes is thinking... ⏳"))
         QApplication.processEvents()
         self.coach_output.setMarkdown(
             self.coach.daily_review(self.storage.get_sessions(), self.storage.get_todos()))
@@ -2159,11 +2257,14 @@ class RakezMainWindow(QMainWindow):
     def _load_analytics(self):
         st = self.storage.stats(days=7)
         lines = [
-            f"Total sessions: {st['total_logged_sessions']} | Last 7d: {st['recent_sessions']}",
-            f"Focus minutes (7d): {st['recent_focus_minutes']}",
-            f"Tasks: {st['done_tasks']}/{st['total_tasks_count']} done | Open: {st['open_tasks']} | Streak: {st['streak_days']}d",
+            tf("Total sessions: {total} | Last 7d: {recent}",
+               total=st['total_logged_sessions'], recent=st['recent_sessions']),
+            tf("Focus minutes (7d): {minutes}", minutes=st['recent_focus_minutes']),
+            tf("Tasks: {done}/{total} done | Open: {open} | Streak: {streak}d",
+               done=st['done_tasks'], total=st['total_tasks_count'],
+               open=st['open_tasks'], streak=st['streak_days']),
             "",
-            "Minutes by category (7d):",
+            t("Minutes by category (7d):"),
         ]
         by_cat = st.get("by_category_min", {})
         if by_cat:
@@ -2172,7 +2273,7 @@ class RakezMainWindow(QMainWindow):
                 bar = "█" * max(1, int(v / mx * 25)) if mx else ""
                 lines.append(f"  {k:12s} {v:4d}m {bar}")
         else:
-            lines.append("  (no focus sessions yet)")
+            lines.append("  " + t("(no focus sessions yet)"))
         self.analytics_box.setText("\n".join(lines))
 
     def closeEvent(self, event):

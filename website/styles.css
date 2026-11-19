@@ -192,6 +192,18 @@ section[id] { scroll-margin-top: 88px; }
   stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
 }
 
+/* language switch (ع / EN) */
+.lang-btn {
+  width: auto;
+  min-width: 44px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: .86rem;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-decoration: none;
+}
+
 /* ---------- header ---------- */
 .site-header {
   position: sticky;

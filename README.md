@@ -10,6 +10,8 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-9ece6a)](#-التنزيل)
 
+**🌐 [العربية](README.md) · [English](README.en.md)**
+
 [التنزيل](#-التنزيل) · [المميزات](#-المميزات) · [الموقع](#-الموقع) · [الأسئلة الشائعة](#-استكشاف-الأخطاء)
 
 </div>
@@ -52,6 +54,11 @@
 ### 💻 CLI + Local API
 - كل شيء متاح من الطرفية (إضافة/إتمام/إحصاءات/مشاريع/مزامنة).
 - HTTP API محلي للمصادقة والتكامل مع أدوات خارجية.
+
+### 🌐 واجهة عربية وإنجليزية
+- بدّل اللغة من **Settings → 🌐 Language** — النافذة والودجت وكل الرسائل تتغير فورًا بدون إعادة تشغيل.
+- الإنجليزية هي الافتراضية، ويمكن اختيار العربية يدويًا أو تلقائيًا حسب لغة النظام عند أول تشغيل.
+- نفس الخيار في الطرفية: `python -m cli.app --lang ar projects`.
 
 ---
 
@@ -97,7 +104,7 @@ python -m cli.app add "تصميم الصفحة" --project Website --priority hig
 python -m cli.app projects
 python -m cli.app stats --days 7
 python -m cli.app google-test          # فحص ربط Google
-python -m pytest tests -q              # 57 اختبارًا
+python -m pytest tests -q              # 64 اختبارًا
 ```
 
 ---
@@ -198,7 +205,7 @@ python -m cli.app serve --port 8765
 ## 🧪 التطوير والبناء
 
 ```bash
-python -m pytest tests -q          # 57 اختبارًا
+python -m pytest tests -q          # 64 اختبارًا
 
 python packaging/build_windows.py  # dist/Rakez.exe
 iscc packaging/Rakez.iss           # dist/Rakez-Setup-<version>.exe
@@ -225,7 +232,7 @@ cli/app.py            أوامر Typer
 config/               config.yaml + prompt.py
 website/              الموقع التسويقي (GitHub Pages)
 packaging/            PyInstaller + Inno Setup + Linux
-tests/                57 اختبارًا
+tests/                64 اختبارًا
 ```
 
 ---

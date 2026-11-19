@@ -13,9 +13,17 @@ except Exception:
 from core.storage import SqliteStorage
 from core.coach import HermesCoach
 from core.joplin import DEFAULT_FOLDER as JOPLIN_DEFAULT_FOLDER
+from core.i18n import set_language, t as tr, tf
 
 app = typer.Typer(help="Rakez focus system")
 console = Console()
+
+
+@app.callback()
+def main(lang: str = typer.Option("en", "--lang", "-l",
+                                  help="Output language: en or ar")):
+    """Rakez focus system — bilingual CLI (English / العربية)."""
+    set_language(lang)
 
 
 def _store() -> SqliteStorage:
@@ -27,10 +35,10 @@ def add(title: str, category: str = "Deep Work", priority: str = "medium", estim
         project: str = typer.Option("", "--project", "-p", help="Project name (created if new)")):
     """Add a task."""
     if not (title or "").strip():
-        console.print("[red]Title must not be empty[/red]")
+        console.print(f"[red]{tr('Title must not be empty')}[/red]")
         raise typer.Exit(1)
     if estimate < 1:
-        console.print("[red]Estimate must be >= 1[/red]")
+        console.print(f"[red]{tr('Estimate must be >= 1')}[/red]")
         raise typer.Exit(1)
     s = _store()
     pid = ""
@@ -45,16 +53,18 @@ def add(title: str, category: str = "Deep Work", priority: str = "medium", estim
         pid = proj["id"]
     t = s.add_todo(title, category, priority, estimate, project_id=pid)
     label = f" [{proj['name']}]" if proj else ""
-    console.print(f"[green]Added:[/green] {t['title']}{label} [{t['category']}] (id={t['id']})")
+    console.print(f"[green]{tr('Added:')}[/green] {t['title']}{label} "
+                  f"[{tr(t['category'])}] (id={t['id']})")
 
 
 @app.command()
 def projects():
     """List projects with progress."""
     s = _store()
-    table = Table(title="Rakez Projects")
-    table.add_column("ID"); table.add_column("Name"); table.add_column("Progress")
-    table.add_column("Tasks"); table.add_column("%")
+    table = Table(title=tr("Rakez Projects"))
+    table.add_column(tr("ID")); table.add_column(tr("Name"))
+    table.add_column(tr("Progress"))
+    table.add_column(tr("Tasks")); table.add_column("%")
     for p in s.get_projects():
         table.add_row(p["id"], p["name"], f"{p['done']}/{p['total']}", "", f"{p['pct']}%")
     console.print(table)
@@ -77,9 +87,9 @@ def assign(key: str, project: str):
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
     if updated is None:
-        console.print("[red]Task not found[/red]")
+        console.print(f"[red]{tr('Task not found')}[/red]")
         raise typer.Exit(1)
-    console.print(f"[green]Assigned:[/green] {updated['title']} → {proj['name']}")
+    console.print(f"[green]{tr('Assigned:')}[/green] {updated['title']} → {proj['name']}")
 
 
 @app.command(name="list")
@@ -89,12 +99,13 @@ def list_tasks(all: bool = False):
     todos = s.get_todos()
     if not all:
         todos = [t for t in todos if not t.get("completed")]
-    table = Table(title="Rakez Tasks")
-    table.add_column("ID"); table.add_column("Title"); table.add_column("Cat")
-    table.add_column("Pri"); table.add_column("Done"); table.add_column("Pom")
+    table = Table(title=tr("Rakez Tasks"))
+    table.add_column(tr("ID")); table.add_column(tr("Title"))
+    table.add_column(tr("Cat"))
+    table.add_column(tr("Pri")); table.add_column(tr("Done")); table.add_column("Pom")
     for t in todos:
-        table.add_row(t.get("id","")[:8], t.get("title",""), t.get("category",""),
-                      t.get("priority",""), "x" if t.get("completed") else "o",
+        table.add_row(t.get("id","")[:8], t.get("title",""), tr(t.get("category","")),
+                      tr(t.get("priority","")), "x" if t.get("completed") else "o",
                       f"{t.get('done_pomodoros',0)}/{t.get('estimate_pomodoros',1)}")
     console.print(table)
 
@@ -104,7 +115,8 @@ def done(key: str):
     """Mark task done by id or title."""
     s = _store()
     ok = s.set_completed(key, True)
-    console.print("[green]Done x[/green]" if ok else "[red]Not found[/red]")
+    console.print(f"[green]{tr('Done x')}[/green]" if ok
+                  else f"[red]{tr('Not found')}[/red]")
 
 
 @app.command()
@@ -112,7 +124,8 @@ def rm(key: str):
     """Delete a task."""
     s = _store()
     ok = s.delete_todo(key)
-    console.print("[green]Deleted[/green]" if ok else "[red]Not found[/red]")
+    console.print(f"[green]{tr('Deleted')}[/green]" if ok
+                  else f"[red]{tr('Not found')}[/red]")
 
 
 @app.command()
@@ -120,16 +133,21 @@ def stats(days: int = 7):
     """Show focus stats."""
     s = _store()
     st = s.stats(days=days)
-    console.print(f"Sessions: {st['total_logged_sessions']} (last {days}d: {st['recent_sessions']})")
-    console.print(f"Focus minutes (last {days}d): {st['recent_focus_minutes']}")
-    console.print(f"Tasks: {st['done_tasks']}/{st['total_tasks_count']} done | streak: {st['streak_days']}d")
+    console.print(tf("Sessions: {total} (last {days}d: {recent})",
+                     total=st['total_logged_sessions'], days=days,
+                     recent=st['recent_sessions']))
+    console.print(tf("Focus minutes (last {days}d): {minutes}",
+                     days=days, minutes=st['recent_focus_minutes']))
+    console.print(tf("Tasks: {done}/{total} done | streak: {streak}d",
+                     done=st['done_tasks'], total=st['total_tasks_count'],
+                     streak=st['streak_days']))
     if st["by_category_min"]:
-        t = Table(title=f"Minutes by category ({days}d)")
-        t.add_column("Category"); t.add_column("Min")
+        tbl = Table(title=tf("Minutes by category ({days}d)", days=days))
+        tbl.add_column(tr("Category")); tbl.add_column("Min")
         for k, v in sorted(st["by_category_min"].items(), key=lambda x: -x[1]):
             bar = "█" * min(30, max(1, v // 5))
-            t.add_row(k, f"{v} {bar}")
-        console.print(t)
+            tbl.add_row(tr(k), f"{v} {bar}")
+        console.print(tbl)
 
 
 @app.command(name="google-test")
@@ -143,11 +161,12 @@ def google_test(authorize: bool = typer.Option(False, "--authorize", "-a",
                     client_id=cfg.get("google_client_id", ""),
                     client_secret=cfg.get("google_client_secret", ""))
     if authorize:
-        console.print("Opening browser for Google authorization...")
+        console.print(tr("Opening browser for Google authorization..."))
         if not gs.authorize():
-            console.print(f"[red]Authorization failed:[/red] {gs.last_error}")
+            console.print(f"[red]{tr('Authorization failed:')}[/red] {gs.last_error}")
             raise typer.Exit(1)
-        console.print("[green]Authorized.[/green] Token saved to data/google_token.json")
+        console.print(f"[green]{tr('Authorized.')}[/green] "
+                      f"{tr('Token saved to data/google_token.json')}")
     res = gs.test_connection()
     color = "green" if res["ok"] else "yellow"
     console.print(f"[{color}]{res['message']}[/{color}]")
@@ -175,16 +194,18 @@ def dedupe(folder: str = JOPLIN_DEFAULT_FOLDER, apply: bool = False):
     from core.joplin import JoplinClient
     c = JoplinClient()
     if not c.available:
-        console.print("[red]Joplin not configured (set JOPLIN_TOKEN)[/red]")
+        console.print(f"[red]{tr('Joplin not configured (set JOPLIN_TOKEN)')}[/red]")
         raise typer.Exit(1)
     res = c.dedupe(folder, dry_run=not apply)
     if res.get("error"):
         console.print(f"[yellow]{res['error']}[/yellow]")
-    console.print(f"Duplicate groups: {res['groups']} ({res['dup_notes']} notes)")
+    console.print(tf("Duplicate groups: {groups} ({notes} notes)",
+                     groups=res['groups'], notes=res['dup_notes']))
     if not apply:
-        console.print("Dry run — nothing deleted. Re-run with --apply to clean.")
+        console.print(tr("Dry run — nothing deleted. Re-run with --apply to clean."))
     else:
-        console.print(f"Deleted {len(res['deleted'])} duplicates (see Joplin Trash).")
+        console.print(tf("Deleted {n} duplicates (see Joplin Trash).",
+                         n=len(res['deleted'])))
 
 
 @app.command()

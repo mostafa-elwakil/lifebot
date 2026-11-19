@@ -7,8 +7,28 @@
   var API = "https://api.github.com/repos/" + REPO + "/releases/latest";
 
   var root = document.documentElement;
+  var LANG = (root.lang || "ar").toLowerCase().indexOf("en") === 0 ? "en" : "ar";
   var $ = function (sel, ctx) { return (ctx || document).querySelector(sel); };
   var $$ = function (sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); };
+
+  var TEXT = {
+    ar: {
+      themeToDark: "تفعيل الوضع الداكن",
+      themeToLight: "تفعيل الوضع الفاتح",
+      dark: "الوضع الداكن",
+      light: "الوضع الفاتح",
+      download: "تحميل المثبّت ",
+      locale: "ar-EG"
+    },
+    en: {
+      themeToDark: "Switch to dark mode",
+      themeToLight: "Switch to light mode",
+      dark: "Dark mode",
+      light: "Light mode",
+      download: "Download installer ",
+      locale: "en-GB"
+    }
+  }[LANG];
 
   /* ---------------- theme ---------------- */
   function setTheme(theme, persist) {
@@ -20,8 +40,8 @@
     if (meta) meta.setAttribute("content", theme === "light" ? "#f5f6fa" : "#12131c");
     var btn = $("#theme-toggle");
     if (btn) {
-      btn.setAttribute("aria-label", theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح");
-      btn.setAttribute("title", theme === "light" ? "الوضع الداكن" : "الوضع الفاتح");
+      btn.setAttribute("aria-label", theme === "light" ? TEXT.themeToDark : TEXT.themeToLight);
+      btn.setAttribute("title", theme === "light" ? TEXT.dark : TEXT.light);
     }
   }
 
@@ -81,11 +101,19 @@
 
   /* ---------------- design tabs ---------------- */
   var CAPTIONS = {
-    pill: "Glass Pill — زجاجي هادئ بحدود ملوّنة، الأكثر استخدامًا.",
-    neon: "Neon Card — توهّج بنفسجي ووردي لمحبي الأجواء الليلية.",
-    split: "Split Flip — لوحتان متقابلتان، الوقت في جهة والمهمة في الأخرى.",
-    retro: "Typewriter — ورقة قديمة وحبر داكن، لأجواء الآلة الكاتبة."
-  };
+    ar: {
+      pill: "Glass Pill — زجاجي هادئ بحدود ملوّنة، الأكثر استخدامًا.",
+      neon: "Neon Card — توهّج بنفسجي ووردي لمحبي الأجواء الليلية.",
+      split: "Split Flip — لوحتان متقابلتان، الوقت في جهة والمهمة في الأخرى.",
+      retro: "Typewriter — ورقة قديمة وحبر داكن، لأجواء الآلة الكاتبة."
+    },
+    en: {
+      pill: "Glass Pill — calm frosted glass with a colored rim. The default.",
+      neon: "Neon Card — purple and pink glow for late-night sessions.",
+      split: "Split Flip — two facing panels: the time on one side, the task on the other.",
+      retro: "Typewriter — old paper and dark ink, straight out of a typewriter."
+    }
+  }[LANG];
   var stage = $("#stage-demo");
   var caption = $("#stage-caption");
   var tabs = $$("[data-design-tab]");
@@ -131,14 +159,15 @@
   function fmtSize(bytes) {
     if (!bytes) return "—";
     var mb = bytes / (1024 * 1024);
+    var num = mb >= 10 ? Math.round(mb) : mb.toFixed(1);
     // keep the Latin run LTR inside the Arabic page («74 MB», not «MB 74»)
-    return "\u200E" + (mb >= 10 ? Math.round(mb) : mb.toFixed(1)) + " MB";
+    return (LANG === "ar" ? "\u200E" : "") + num + " MB";
   }
 
   function fmtDate(iso) {
     if (!iso) return "—";
     try {
-      return new Date(iso).toLocaleDateString("ar-EG", {
+      return new Date(iso).toLocaleDateString(TEXT.locale, {
         year: "numeric", month: "long", day: "numeric"
       });
     } catch (e) {
@@ -168,7 +197,7 @@
     if (version) setText("[data-version]", version);
     if (installer) {
       setText("[data-size]", fmtSize(installer.size));
-      setText("[data-download-label]", "تحميل المثبّت " + version);
+      setText("[data-download-label]", TEXT.download + version);
       $$("[data-download-link]").forEach(function (a) {
         a.setAttribute("href", installer.browser_download_url || a.getAttribute("href"));
       });
