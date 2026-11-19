@@ -307,6 +307,10 @@ AR = {
         "هذا الإصدار لا يحتوي على ملف مثبّت.\n"
         "اطلب من الناشر إرفاق Rakez-Setup-*.exe في صفحة الإصدار.",
     "Install update": "تثبيت التحديث",
+    "New version {latest} is ready — open Settings and press Download & Install.":
+        "الإصدار {latest} جاهز — افتح الإعدادات واضغط تنزيل وتثبيت.",
+    "New version {latest} is available, but the release has no installer attached.":
+        "الإصدار {latest} متاح، لكن صفحة الإصدار لا تحتوي على ملف مثبّت.",
     "Download and install Rakez {latest}{detail}?\n\n"
     "The installer will run silently and Rakez will close to finish.\n"
     "Your tasks and settings are kept.":

@@ -1613,10 +1613,12 @@ class RakezMainWindow(QMainWindow):
             self.update_install_btn.setText(t("⬇️ Download & Install update"))
             if has_installer:
                 self._notify(t("Rakez"),
-                             f"New version {latest} is ready — open Settings and press Download & Install.")
+                             tf("New version {latest} is ready — open Settings and press Download & Install.",
+                                latest=latest))
             else:
                 self._notify(t("Rakez"),
-                             f"New version {latest} is available, but the release has no installer attached.")
+                             tf("New version {latest} is available, but the release has no installer attached.",
+                                latest=latest))
         else:
             self.update_label.setText(tf("✓ Up to date — {cur} is the latest release", cur=cur))
             self.update_label.setStyleSheet("color: #565f89;")
