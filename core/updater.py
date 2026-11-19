@@ -16,7 +16,7 @@ try:
 except Exception:  # pragma: no cover
     requests = None  # type: ignore
 
-APP_VERSION = "2.0.6"
+APP_VERSION = "2.1.0"
 GITHUB_REPO = "mostafa-elwakil/lifebot"
 RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases/latest"
 API_LATEST = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"

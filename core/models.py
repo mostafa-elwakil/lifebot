@@ -16,6 +16,7 @@ class Todo:
     done_pomodoros: int = 0
     project_id: str = ""  # "" = no project
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    completed_at: str = ""  # set when the task is marked done (ISO), cleared on undo
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -39,6 +40,7 @@ class Todo:
             done_pomodoros=Todo._to_int(d.get("done_pomodoros", 0), 0),
             project_id=str(d.get("project_id") or "").strip(),
             created_at=d.get("created_at") or datetime.now().isoformat(),
+            completed_at=str(d.get("completed_at") or ""),
         )
 
 

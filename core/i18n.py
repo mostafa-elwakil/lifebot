@@ -473,4 +473,137 @@ AR = {
         "تجربة فقط — لم يُحذف شيء. أعد التشغيل مع --apply للتنظيف.",
     "Deleted {n} duplicates (see Joplin Trash).":
         "حُذفت {n} نسخة مكررة (انظر سلة Joplin).",
+
+    # ---- Telegram ----
+    "Telegram": "تلجرام",
+    "not configured": "غير مُهيّأ",
+    "chat ID missing": "معرّف المحادثة ناقص",
+    "ready": "جاهز",
+    "listening for commands": "يستمع للأوامر",
+    "task list updated from Telegram": "حُدّثت المهام من تلجرام",
+    "Telegram token missing": "رمز بوت تلجرام مطلوب",
+    "Telegram chat ID missing": "معرّف محادثة تلجرام مطلوب",
+    "No data store available.": "لا يوجد مخزن بيانات متاح.",
+    "📊 Rakez report — {date}": "📊 تقرير ركّز — {date}",
+    "✅ Done today ({n})": "✅ أُنجز اليوم ({n})",
+    "Nothing completed yet today.": "لم تُنجز أي مهمة اليوم بعد.",
+    "📋 Remaining tasks ({n})": "📋 المهام المتبقية ({n})",
+    "Complete one with: /done N (or /done id)":
+        "أنجز واحدة بـ: /done رقم (أو /done المعرف)",
+    "All clear — nothing left to do. 🎉": "كل شيء منجز — لا مهام متبقية. 🎉",
+    "📁 Projects": "📁 المشاريع",
+    "🔥 Focus today: {n} min": "🔥 تركيز اليوم: {n} دقيقة",
+    "🤖 Rakez bot": "🤖 بوت ركّز",
+    "Your chat ID is {id}.": "معرّف محادثتك هو {id}.",
+    "Save it in Settings → ✈️ Telegram to receive reports.":
+        "احفظه في الإعدادات ← ✈️ تلجرام لتصلك التقارير.",
+    "/report — done today + remaining tasks":
+        "/report — ما أُنجز اليوم + المهام المتبقية",
+    "/tasks — numbered list of open tasks":
+        "/tasks — قائمة مرقّمة بالمهام المفتوحة",
+    "/done N — complete task number N":
+        "/done رقم — إنهاء المهمة رقم N",
+    "/done id — complete by id or exact title":
+        "/done معرف — الإنهاء بالمعرف أو العنوان بالضبط",
+    "/add title — add a task": "/add عنوان — إضافة مهمة",
+    "/add title | project — add it inside a project":
+        "/add عنوان | مشروع — إضافتها داخل مشروع",
+    "/projects — projects and their progress":
+        "/projects — المشاريع ونسبة تقدمها",
+    "/id — show this chat's ID": "/id — إظهار معرّف هذه المحادثة",
+    "Any plain message is added as a new task.":
+        "أي رسالة عادية تُضاف كمهمة جديدة.",
+    "No projects yet. Add one from the app or with /add title | project.":
+        "لا مشاريع بعد. أضف واحدًا من البرنامج أو بـ /add عنوان | مشروع.",
+    "No task number {n}. Send /tasks to see the list.":
+        "لا توجد مهمة رقم {n}. أرسل /tasks لعرض القائمة.",
+    "Task not found: {name}": "المهمة غير موجودة: {name}",
+    "Already done: {name}": "منجزة بالفعل: {name}",
+    "✅ Done: {name}\n📋 {n} task(s) left.":
+        "✅ تم الإنجاز: {name}\n📋 باقي {n} مهمة.",
+    "⚠ Could not complete: {name}": "⚠ تعذّر إنجاز: {name}",
+    "Usage: /add task title  (optionally: /add title | project)":
+        "الاستخدام: /add عنوان المهمة  (اختياريًا: /add عنوان | مشروع)",
+    "⚠ Could not use project '{name}': {err}":
+        "⚠ تعذّر استخدام المشروع '{name}': {err}",
+    "⚠ Could not add the task: {err}": "⚠ تعذّرت إضافة المهمة: {err}",
+    "➕ Added: {name}{where}": "➕ أُضيفت: {name}{where}",
+    "⚠ Error: {err}": "⚠ خطأ: {err}",
+
+    # Telegram — settings row
+    "✈️ Telegram (reports + add/complete tasks from your phone):":
+        "✈️ تلجرام (تقارير + إضافة وإنهاء المهام من هاتفك):",
+    "Bot token from @BotFather": "رمز البوت من @BotFather",
+    "Chat ID:": "معرّف المحادثة:",
+    "Send /start to the bot, then Detect": "أرسل /start للبوت ثم اضغط اكتشاف",
+    "🔌 Test": "🔌 اختبار",
+    "Check the token and send a test message":
+        "تحقّق من الرمز وأرسل رسالة تجريبية",
+    "🔎 Detect chat ID": "🔎 اكتشاف معرّف المحادثة",
+    "Read the latest message sent to the bot":
+        "قراءة آخر رسالة أُرسلت إلى البوت",
+    "📊 Send report now": "📊 إرسال التقرير الآن",
+    "Send done-today + remaining tasks to Telegram":
+        "إرسال ما أُنجز اليوم والمهام المتبقية إلى تلجرام",
+    "Notify me when a task is completed": "أشعرني عند إنجاز مهمة",
+    "Daily report at": "تقرير يومي الساعة",
+    "Telegram: {status}": "تلجرام: {status}",
+    "Paste the bot token from @BotFather first.":
+        "الصق رمز البوت من @BotFather أولًا.",
+    "⏳ testing Telegram...": "⏳ جارٍ اختبار تلجرام...",
+    "⚠ Telegram: {err}": "⚠ تلجرام: {err}",
+    "Token check failed:\n{err}": "فشل التحقق من الرمز:\n{err}",
+    "✓ @{name} — send /start to the bot, then press Detect chat ID":
+        "✓ @{name} — أرسل /start للبوت ثم اضغط اكتشاف معرّف المحادثة",
+    "Token OK (@{name}).\n\nOpen Telegram, send /start to the bot, "
+    "then press 🔎 Detect chat ID.":
+        "الرمز صحيح (@{name}).\n\nافتح تلجرام وأرسل /start للبوت "
+        "ثم اضغط 🔎 اكتشاف معرّف المحادثة.",
+    "✅ Rakez is connected to Telegram.\nBot: @{name}":
+        "✅ تم ربط ركّز بتلجرام.\nالبوت: @{name}",
+    "✓ connected to @{name}": "✓ متصل بـ @{name}",
+    "Connection OK — a test message was sent to your chat.\n"
+    "Bot: @{name}":
+        "الاتصال سليم — أُرسلت رسالة تجريبية إلى محادثتك.\n"
+        "البوت: @{name}",
+    "Could not send the test message:\n{err}\n\n"
+    "Check the Chat ID (press Detect chat ID).":
+        "تعذّر إرسال الرسالة التجريبية:\n{err}\n\n"
+        "تحقّق من معرّف المحادثة (اضغط اكتشاف).",
+    "⏳ reading the latest message...": "⏳ جارٍ قراءة آخر رسالة...",
+    "⚠ no messages found": "⚠ لا رسائل موجودة",
+    "No messages found.\n\nOpen Telegram, send /start to your bot, "
+    "then press Detect chat ID again.":
+        "لا رسائل موجودة.\n\nافتح تلجرام وأرسل /start للبوت "
+        "ثم اضغط اكتشاف معرّف المحادثة مرة أخرى.",
+    "✓ chat ID {id}": "✓ معرّف المحادثة {id}",
+    "Chat ID saved: {id}": "حُفظ معرّف المحادثة: {id}",
+    "Set the bot token and chat ID first.\n"
+    "Send /start to your bot, then press Detect chat ID.":
+        "أضف رمز البوت ومعرّف المحادثة أولًا.\n"
+        "أرسل /start للبوت ثم اضغط اكتشاف معرّف المحادثة.",
+    "⏳ sending the report...": "⏳ جارٍ إرسال التقرير...",
+    "✓ report sent": "✓ أُرسل التقرير",
+    "Could not send the report:\n{err}": "تعذّر إرسال التقرير:\n{err}",
+
+    # Telegram — CLI
+    "Telegram token missing (Settings → Telegram)":
+        "رمز بوت تلجرام مطلوب (الإعدادات ← تلجرام)",
+    "Telegram error: {err}": "خطأ تلجرام: {err}",
+    "Connected as @{name}": "متصل كـ @{name}",
+    "No chat ID yet — send /start to the bot, then run telegram-chat-id":
+        "لا معرّف محادثة بعد — أرسل /start للبوت ثم شغّل telegram-chat-id",
+    "Test message sent": "أُرسلت الرسالة التجريبية",
+    "Send failed: {err}": "فشل الإرسال: {err}",
+    "Chat ID: {id}": "معرّف المحادثة: {id}",
+    "Save it in Settings → ✈️ Telegram (Chat ID) to receive reports.":
+        "احفظه في الإعدادات ← ✈️ تلجرام (معرّف المحادثة) لتصلك التقارير.",
+    "No messages found — send /start to your bot and try again.":
+        "لا رسائل موجودة — أرسل /start للبوت وحاول مرة أخرى.",
+    "Token or chat ID missing — report not sent.":
+        "الرمز أو معرّف المحادثة ناقص — لم يُرسل التقرير.",
+    "Report sent to Telegram": "أُرسل التقرير إلى تلجرام",
+    "Listening for Telegram commands… Ctrl+C to stop":
+        "يستمع لأوامر تلجرام… اضغط Ctrl+C للإيقاف",
+    "Stopped": "تم الإيقاف",
 }

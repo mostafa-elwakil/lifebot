@@ -57,7 +57,7 @@ class SqliteStorage:
             id TEXT PRIMARY KEY, title TEXT NOT NULL, category TEXT DEFAULT 'Deep Work',
             completed INTEGER DEFAULT 0, priority TEXT DEFAULT 'medium',
             estimate_pomodoros INTEGER DEFAULT 1, done_pomodoros INTEGER DEFAULT 0,
-            project_id TEXT DEFAULT '', created_at TEXT
+            project_id TEXT DEFAULT '', created_at TEXT, completed_at TEXT DEFAULT ''
         )""")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS sessions(
@@ -72,6 +72,12 @@ class SqliteStorage:
         # old DBs: add the project_id column if missing
         try:
             self._conn.execute("ALTER TABLE todos ADD COLUMN project_id TEXT DEFAULT ''")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        # old DBs: add completed_at (powers "done today" in the Telegram report)
+        try:
+            self._conn.execute("ALTER TABLE todos ADD COLUMN completed_at TEXT DEFAULT ''")
             self._conn.commit()
         except sqlite3.OperationalError:
             pass  # column already exists
@@ -108,7 +114,8 @@ class SqliteStorage:
 
     _INSERT_SQL = (
         "INSERT OR REPLACE INTO todos(id,title,category,completed,priority,"
-        "estimate_pomodoros,done_pomodoros,project_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)"
+        "estimate_pomodoros,done_pomodoros,project_id,created_at,completed_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)"
     )
 
     @_locked
@@ -116,7 +123,8 @@ class SqliteStorage:
         self._conn.execute(
             self._INSERT_SQL,
             (todo.id, todo.title, todo.category, int(todo.completed), todo.priority,
-             todo.estimate_pomodoros, todo.done_pomodoros, todo.project_id, todo.created_at),
+             todo.estimate_pomodoros, todo.done_pomodoros, todo.project_id,
+             todo.created_at, todo.completed_at),
         )
         if commit:
             self._conn.commit()
@@ -139,7 +147,7 @@ class SqliteStorage:
                     self._INSERT_SQL,
                     (todo.id, todo.title, todo.category, int(todo.completed),
                      todo.priority, todo.estimate_pomodoros, todo.done_pomodoros,
-                     todo.project_id, todo.created_at),
+                     todo.project_id, todo.created_at, todo.completed_at),
                 )
 
     @_locked
@@ -180,8 +188,12 @@ class SqliteStorage:
     @_locked
     def set_completed(self, todo_id_or_title: str, completed: bool = True) -> bool:
         cur = self._conn.cursor()
-        cur.execute("UPDATE todos SET completed=? WHERE id=? OR title=?",
-                    (int(completed), todo_id_or_title, todo_id_or_title))
+        cur.execute(
+            "UPDATE todos SET completed=?, completed_at=? WHERE id=? OR title=?",
+            (int(completed),
+             datetime.now().isoformat() if completed else "",
+             todo_id_or_title, todo_id_or_title),
+        )
         self._conn.commit()
         return cur.rowcount > 0
 
@@ -227,8 +239,15 @@ class SqliteStorage:
                     if by_name is None:
                         raise ValueError(f"project '{v}' not found")
                     v = by_name["id"]
+            if k == "completed":
+                sets.append("completed=?")
+                vals.append(int(bool(v)))
+                # keep completed_at in sync for the "done today" report
+                sets.append("completed_at=?")
+                vals.append(datetime.now().isoformat() if v else "")
+                continue
             sets.append(f"{k}=?")
-            vals.append(int(bool(v)) if k == "completed" else v)
+            vals.append(v)
         if sets:
             self._conn.execute(
                 f"UPDATE todos SET {', '.join(sets)} WHERE id=?", (*vals, row["id"]))

@@ -6,9 +6,10 @@ from .settings import load_settings, save_settings, ACCENTS, DEFAULTS as SETTING
 from .settings import SOUND_NAMES, DESIGNS, BACKGROUNDS, CUSTOM_LABEL, valid_hex
 from .api import run_server
 from .google_sync import GoogleSync
+from .telegram import TelegramBot
 
 __all__ = ["Todo", "FocusSession", "SqliteStorage", "SimpleStorage", "CATEGORIES",
            "HermesCoach", "JoplinClient", "JOPLIN_DEFAULT_FOLDER",
            "load_settings", "save_settings", "ACCENTS", "SETTINGS_DEFAULTS",
-           "run_server", "GoogleSync", "SOUND_NAMES", "DESIGNS", "BACKGROUNDS",
-           "CUSTOM_LABEL", "valid_hex"]
+           "run_server", "GoogleSync", "TelegramBot", "SOUND_NAMES", "DESIGNS",
+           "BACKGROUNDS", "CUSTOM_LABEL", "valid_hex"]

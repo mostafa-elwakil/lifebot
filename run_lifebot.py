@@ -1,6 +1,7 @@
 ﻿import sys
 import os
 import tempfile
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from core.settings import load_settings, save_settings, ACCENTS, DEFAULTS as SET
 from core.settings import (SOUND_NAMES, DESIGNS, BACKGROUNDS, THEMES,
                            THEME_BACKGROUNDS, valid_hex, is_light_color)
 from core.google_sync import GoogleSync
+from core.telegram import TelegramBot
 from core.i18n import (LANGUAGES, detect_language, get_language, is_arabic,
                        set_language, t, tf, translate_tree)
 from core import updater
@@ -131,9 +133,40 @@ class _UpdateDownloader(QThread):
         self.done.emit(res)
 
 
+class _TelegramPoller(QThread):
+    """Long-poll Telegram in the background so the GUI never blocks."""
+
+    changed = pyqtSignal()
+
+    def __init__(self, bot: TelegramBot, parent=None):
+        super().__init__(parent)
+        self.bot = bot
+        self._stop = threading.Event()
+
+    def stop(self):
+        self._stop.set()
+
+    def run(self):
+        while not self._stop.is_set():
+            try:
+                updates = self.bot.get_updates()
+            except Exception:
+                updates = []
+            for update in updates:
+                if self._stop.is_set():
+                    break
+                try:
+                    if self.bot.handle_update(update):
+                        self.changed.emit()
+                except Exception:
+                    pass
+            if not updates:
+                # network hiccup or no messages: wait before polling again
+                self._stop.wait(2)
+
+
 class _RingWidget(QWidget):
     """Circular progress ring with % text (Glass Pill design)."""
-
     def __init__(self, parent=None, color="#7aa2f7", size=84):
         super().__init__(parent)
         self._value = 0
@@ -999,6 +1032,12 @@ class RakezMainWindow(QMainWindow):
             data_dir=DATA_DIR,
             client_id=self.app_settings.get("google_client_id", ""),
             client_secret=self.app_settings.get("google_client_secret", ""))
+        self.telegram = TelegramBot(
+            token=self.app_settings.get("telegram_token", ""),
+            chat_id=self.app_settings.get("telegram_chat_id", ""),
+            storage=self.storage)
+        self._telegram_poller = None
+        self._telegram_last_daily = ""
         self.theme = self.app_settings.get("theme", "dark")
         lang = self.app_settings.get("language") or ""
         if lang not in ("en", "ar"):
@@ -1032,6 +1071,12 @@ class RakezMainWindow(QMainWindow):
         self._init_ui()
         self._apply_theme()
         self._init_tray()
+        # Telegram: background long polling + the daily report ticker
+        self._start_telegram_polling()
+        self._telegram_daily_timer = QTimer(self)
+        self._telegram_daily_timer.setInterval(60_000)
+        self._telegram_daily_timer.timeout.connect(self._check_telegram_daily)
+        self._telegram_daily_timer.start()
 
     def _apply_theme(self):
         """Dark (Tokyo Night) or Light (Paper) stylesheet for the dashboard."""
@@ -1109,6 +1154,7 @@ class RakezMainWindow(QMainWindow):
         # Qt owns the old central widget: setCentralWidget() drops it for us
         self._init_ui()
         self._apply_theme()
+        self._refresh_telegram_status()
         try:
             self.floating_widget._build_design()
             translate_tree(self.floating_widget)
@@ -1510,6 +1556,57 @@ class RakezMainWindow(QMainWindow):
         grow.addWidget(test_btn)
         layout.addLayout(grow)
 
+        # --- Telegram (reports + remote tasks) ---
+        layout.addWidget(QLabel("✈️ Telegram (reports + add/complete tasks from your phone):"))
+        tg_row = QHBoxLayout()
+        self.tg_token_edit = QLineEdit()
+        self.tg_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.tg_token_edit.setPlaceholderText("Bot token from @BotFather")
+        self.tg_token_edit.setText(s.get("telegram_token", ""))
+        tg_row.addWidget(self.tg_token_edit, stretch=2)
+        tg_row.addWidget(QLabel("Chat ID:"))
+        self.tg_chat_edit = QLineEdit()
+        self.tg_chat_edit.setPlaceholderText("Send /start to the bot, then Detect")
+        self.tg_chat_edit.setText(s.get("telegram_chat_id", ""))
+        tg_row.addWidget(self.tg_chat_edit, stretch=1)
+        layout.addLayout(tg_row)
+
+        tg_btns = QHBoxLayout()
+        tg_test = QPushButton("🔌 Test")
+        tg_test.setToolTip("Check the token and send a test message")
+        tg_test.clicked.connect(self._test_telegram)
+        tg_detect = QPushButton("🔎 Detect chat ID")
+        tg_detect.setToolTip("Read the latest message sent to the bot")
+        tg_detect.clicked.connect(self._detect_telegram_chat)
+        tg_report = QPushButton("📊 Send report now")
+        tg_report.setToolTip("Send done-today + remaining tasks to Telegram")
+        tg_report.clicked.connect(self._send_telegram_report)
+        tg_btns.addWidget(tg_test)
+        tg_btns.addWidget(tg_detect)
+        tg_btns.addWidget(tg_report)
+        tg_btns.addStretch()
+        layout.addLayout(tg_btns)
+
+        tg_opts = QHBoxLayout()
+        self.tg_reports_check = QCheckBox("Notify me when a task is completed")
+        self.tg_reports_check.setChecked(bool(s.get("telegram_reports", True)))
+        tg_opts.addWidget(self.tg_reports_check)
+        self.tg_daily_check = QCheckBox("Daily report at")
+        self.tg_daily_check.setChecked(bool(s.get("telegram_daily", False)))
+        tg_opts.addWidget(self.tg_daily_check)
+        self.tg_hour_spin = QSpinBox()
+        self.tg_hour_spin.setRange(0, 23)
+        self.tg_hour_spin.setSuffix(":00")
+        self.tg_hour_spin.setValue(int(s.get("telegram_daily_hour", 20)))
+        tg_opts.addWidget(self.tg_hour_spin)
+        tg_opts.addStretch()
+        layout.addLayout(tg_opts)
+
+        self.telegram_status_label = QLabel("")
+        self.telegram_status_label.setFont(QFont("Segoe UI", 8))
+        self.telegram_status_label.setStyleSheet("color: #565f89;")
+        layout.addWidget(self.telegram_status_label)
+
         # --- update check ---
         layout.addWidget(QLabel("⬆️ Updates:"))
         upd_row = QHBoxLayout()
@@ -1538,7 +1635,12 @@ class RakezMainWindow(QMainWindow):
         self.settings_status.setFont(QFont("Segoe UI", 8))
         layout.addWidget(self.settings_status)
         layout.addStretch()
-        return tab
+        # the settings page grew past the window height → keep it scrollable
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(tab)
+        return scroll
 
     def _apply_widget_size(self):
         w, h = self.set_w_spin.value(), self.set_h_spin.value()
@@ -1577,6 +1679,212 @@ class RakezMainWindow(QMainWindow):
 
     def _test_sound(self):
         play_done_sound(QApplication.instance(), self.sound_combo.currentText())
+
+    # ---- Telegram ----
+    def _telegram_settings_from_ui(self) -> dict:
+        """Read the Telegram row from Settings (empty dict when not built yet)."""
+        if not hasattr(self, "tg_token_edit"):
+            return {}
+        return {
+            "telegram_token": self.tg_token_edit.text().strip(),
+            "telegram_chat_id": self.tg_chat_edit.text().strip(),
+            "telegram_reports": bool(self.tg_reports_check.isChecked()),
+            "telegram_daily": bool(self.tg_daily_check.isChecked()),
+            "telegram_daily_hour": int(self.tg_hour_spin.value()),
+        }
+
+    def _apply_telegram_settings(self, values: dict | None = None, persist: bool = True):
+        """Apply the current values to the live bot and start/stop polling."""
+        values = values if values is not None else self._telegram_settings_from_ui()
+        if not values:
+            return
+        self.app_settings.update(values)
+        # mutate the existing bot: a running poller keeps its offset and never
+        # processes the same update twice
+        self.telegram.configure(
+            token=values.get("telegram_token", ""),
+            chat_id=values.get("telegram_chat_id", ""))
+        self._telegram_last_daily = ""
+        if persist:
+            save_settings(DATA_DIR, self.app_settings)
+        if self.telegram.available:
+            self._start_telegram_polling()
+        else:
+            self._stop_telegram_polling()
+
+    def _refresh_telegram_status(self, extra: str = ""):
+        if not hasattr(self, "telegram_status_label"):
+            return
+        text = tf("Telegram: {status}", status=self.telegram.status())
+        if extra:
+            text = f"{text} — {extra}"
+        self.telegram_status_label.setText(text)
+
+    def _start_telegram_polling(self):
+        self._refresh_telegram_status()
+        if not self.telegram.available:
+            return
+        poller = getattr(self, "_telegram_poller", None)
+        if poller is not None and poller.isRunning() and poller.bot is self.telegram:
+            # already polling the live bot (settings were updated in place)
+            self._refresh_telegram_status(t("listening for commands"))
+            return
+        self._stop_telegram_polling()
+        self._telegram_poller = _TelegramPoller(self.telegram, self)
+        self._telegram_poller.changed.connect(self._on_telegram_changed)
+        self._telegram_poller.start()
+        self._refresh_telegram_status(t("listening for commands"))
+
+    def _stop_telegram_polling(self):
+        poller = getattr(self, "_telegram_poller", None)
+        if poller is not None:
+            try:
+                poller.stop()
+                if not poller.wait(1500):
+                    # the thread is blocked in a long poll; it is safe to kill
+                    # at this point (quit or token removed)
+                    poller.terminate()
+                    poller.wait(500)
+            except Exception:
+                pass
+            self._telegram_poller = None
+
+    def _on_telegram_changed(self):
+        """A Telegram command changed tasks — refresh the GUI."""
+        try:
+            self._load_todos_list()
+            self._refresh_task_dropdown()
+        except Exception:
+            pass
+        self._refresh_telegram_status(t("task list updated from Telegram"))
+
+    def _test_telegram(self):
+        values = self._telegram_settings_from_ui()
+        bot = TelegramBot(token=values.get("telegram_token", ""),
+                          chat_id=values.get("telegram_chat_id", ""),
+                          storage=self.storage)
+        if not bot.token:
+            QMessageBox.warning(self, t("Telegram"),
+                                t("Paste the bot token from @BotFather first."))
+            return
+        self.telegram_status_label.setText(t("⏳ testing Telegram..."))
+        QApplication.processEvents()
+        me = bot.me()
+        if me is None:
+            err = bot.last_error or t("Unknown error")
+            self.telegram_status_label.setText(tf("⚠ Telegram: {err}", err=err))
+            QMessageBox.warning(self, t("Telegram"),
+                                tf("Token check failed:\n{err}", err=err))
+            return
+        name = me.get("username") or me.get("first_name") or "bot"
+        if not bot.chat_id:
+            self.telegram_status_label.setText(
+                tf("✓ @{name} — send /start to the bot, then press Detect chat ID", name=name))
+            QMessageBox.information(
+                self, t("Telegram"),
+                tf("Token OK (@{name}).\n\nOpen Telegram, send /start to the bot, "
+                   "then press 🔎 Detect chat ID.", name=name))
+            self._apply_telegram_settings(values)
+            return
+        if bot.send(tf("✅ Rakez is connected to Telegram.\nBot: @{name}", name=name)):
+            self.telegram_status_label.setText(tf("✓ connected to @{name}", name=name))
+            QMessageBox.information(self, t("Telegram"),
+                                    tf("Connection OK — a test message was sent to your chat.\n"
+                                       "Bot: @{name}", name=name))
+        else:
+            err = bot.last_error or t("Unknown error")
+            self.telegram_status_label.setText(tf("⚠ Telegram: {err}", err=err))
+            QMessageBox.warning(self, t("Telegram"),
+                                tf("Could not send the test message:\n{err}\n\n"
+                                   "Check the Chat ID (press Detect chat ID).", err=err))
+        self._apply_telegram_settings(values)
+
+    def _detect_telegram_chat(self):
+        values = self._telegram_settings_from_ui()
+        token = values.get("telegram_token", "")
+        if not token:
+            QMessageBox.warning(self, t("Telegram"),
+                                t("Paste the bot token from @BotFather first."))
+            return
+        # the poller may already have seen the message: reuse its last chat id
+        chat_id = getattr(self.telegram, "last_chat_id", "") or ""
+        if not chat_id:
+            bot = TelegramBot(token=token, storage=self.storage)
+            bot.offset = getattr(self.telegram, "offset", 0)
+            self.telegram_status_label.setText(t("⏳ reading the latest message..."))
+            QApplication.processEvents()
+            chat_id = bot.detect_chat_id()
+        if not chat_id:
+            self.telegram_status_label.setText(t("⚠ no messages found"))
+            QMessageBox.information(
+                self, t("Telegram"),
+                t("No messages found.\n\nOpen Telegram, send /start to your bot, "
+                  "then press Detect chat ID again."))
+            return
+        self.tg_chat_edit.setText(chat_id)
+        values["telegram_chat_id"] = chat_id
+        self._apply_telegram_settings(values)
+        self.telegram_status_label.setText(tf("✓ chat ID {id}", id=chat_id))
+        QMessageBox.information(self, t("Telegram"),
+                                tf("Chat ID saved: {id}", id=chat_id))
+
+    def _send_telegram_report(self):
+        values = self._telegram_settings_from_ui()
+        bot = TelegramBot(token=values.get("telegram_token", ""),
+                          chat_id=values.get("telegram_chat_id", ""),
+                          storage=self.storage)
+        if not bot.configured:
+            QMessageBox.warning(
+                self, t("Telegram"),
+                t("Set the bot token and chat ID first.\n"
+                  "Send /start to your bot, then press Detect chat ID."))
+            return
+        self.telegram_status_label.setText(t("⏳ sending the report..."))
+        QApplication.processEvents()
+        if bot.send(bot.report_text(self.storage)):
+            self.telegram_status_label.setText(t("✓ report sent"))
+        else:
+            err = bot.last_error or t("Unknown error")
+            self.telegram_status_label.setText(tf("⚠ Telegram: {err}", err=err))
+            QMessageBox.warning(self, t("Telegram"),
+                                tf("Could not send the report:\n{err}", err=err))
+        self._apply_telegram_settings(values)
+
+    def _telegram_notify_done(self, title: str):
+        """Push a completion message to Telegram (background, never blocks)."""
+        title = (title or "").strip()
+        if not title or not self.app_settings.get("telegram_reports", True):
+            return
+        bot = self.telegram
+        if not bot.configured:
+            return
+        try:
+            remaining = len([x for x in self.storage.get_todos() if not x.get("completed")])
+        except Exception:
+            remaining = 0
+        msg = tf("✅ Done: {name}\n📋 {n} task(s) left.", name=title, n=remaining)
+        threading.Thread(target=bot.send, args=(msg,), daemon=True).start()
+
+    def _check_telegram_daily(self):
+        """Once a minute: send the report when the chosen hour arrives."""
+        if not self.app_settings.get("telegram_daily"):
+            return
+        if not self.telegram.configured:
+            return
+        now = datetime.now()
+        try:
+            hour = int(self.app_settings.get("telegram_daily_hour", 20))
+        except (TypeError, ValueError):
+            hour = 20
+        if now.hour != hour:
+            return
+        today = now.date().isoformat()
+        if self._telegram_last_daily == today:
+            return
+        self._telegram_last_daily = today
+        bot = self.telegram
+        report = bot.report_text(self.storage)
+        threading.Thread(target=bot.send, args=(report,), daemon=True).start()
 
     # ---- update check ----
     def _check_for_updates(self, silent: bool = False):
@@ -1710,6 +2018,7 @@ class RakezMainWindow(QMainWindow):
         s["opacity"] = self.opacity_spin.value()
         s["google_client_id"] = self.google_id_edit.text().strip()
         s["google_client_secret"] = self.google_secret_edit.text().strip()
+        s.update(self._telegram_settings_from_ui())
         ok = save_settings(DATA_DIR, s)
         # apply instantly — no restart, no .env
         if s["gemini_key"]:
@@ -1725,6 +2034,7 @@ class RakezMainWindow(QMainWindow):
         self.gsync.client_secret = s["google_client_secret"]
         self.gsync._cal = self.gsync._tasks = None
         self.google_status_label.setText(f"Google: {self.gsync.status()}")
+        self._apply_telegram_settings(s, persist=False)
         self.floating_widget.set_accent(s["accent"])
         self.floating_widget.set_sound(s["sound"])
         self.floating_widget.set_design(s["design"])
@@ -1868,9 +2178,11 @@ class RakezMainWindow(QMainWindow):
         self.activateWindow()
 
     def _on_widget_task_added(self, todo: dict):
-        """Refresh lists when a task is quick-added from the floating widget."""
+        """Refresh lists when a task is quick-added or completed from the widget."""
         self._load_todos_list()
         self._refresh_task_dropdown()
+        if isinstance(todo, dict) and todo.get("completed"):
+            self._telegram_notify_done(todo.get("title", ""))
 
     def _on_widget_resized(self, w: int, h: int):
         """Mirror corner-resize dimensions into the Settings tab (debounced save)."""
@@ -1890,6 +2202,10 @@ class RakezMainWindow(QMainWindow):
 
     def _quit_app(self):
         """Quit the whole program (floating ✕ button or tray Quit)."""
+        try:
+            self._stop_telegram_polling()
+        except Exception:
+            pass
         try:
             if self.tray is not None:
                 self.tray.hide()
@@ -2064,6 +2380,8 @@ class RakezMainWindow(QMainWindow):
         todos = {t["id"]: t for t in self.storage.get_todos()}
         cur = todos.get(key, {}).get("completed", False)
         self.storage.set_completed(key, not cur)
+        if not cur:
+            self._telegram_notify_done(todos.get(key, {}).get("title", ""))
         self._load_todos_list()
         self._refresh_task_dropdown()
 

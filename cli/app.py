@@ -1,5 +1,9 @@
 """Rakez CLI (typer + rich). Usage: python -m cli.app <command>"""
 from __future__ import annotations
+import os
+import sys
+from pathlib import Path
+
 import typer
 from rich.table import Table
 from rich.console import Console
@@ -28,6 +32,33 @@ def main(lang: str = typer.Option("en", "--lang", "-l",
 
 def _store() -> SqliteStorage:
     return SqliteStorage()
+
+
+def _data_dir() -> Path:
+    """Where settings.json lives (matches run_lifebot's DATA_DIR)."""
+    if getattr(sys, "frozen", False):
+        if os.name == "nt":
+            return Path(os.getenv("APPDATA", ".")) / "Rakez" / "data"
+        return Path.home() / ".local" / "share" / "Rakez" / "data"
+    return Path(__file__).resolve().parent.parent / "data"
+
+
+def _telegram_bot():
+    """TelegramBot from settings.json (falling back to environment variables)."""
+    from core.settings import load_settings
+    from core.telegram import TelegramBot
+    cfg = load_settings(_data_dir())
+    return TelegramBot(
+        token=cfg.get("telegram_token") or os.getenv("TELEGRAM_BOT_TOKEN", ""),
+        chat_id=cfg.get("telegram_chat_id") or os.getenv("TELEGRAM_CHAT_ID", ""),
+        storage=_store())
+
+
+def _plain(text: str) -> str:
+    """Strip the HTML tags used for Telegram's parse mode (CLI display)."""
+    for tag in ("<b>", "</b>", "<i>", "</i>"):
+        text = text.replace(tag, "")
+    return text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
 
 
 @app.command()
@@ -206,6 +237,83 @@ def dedupe(folder: str = JOPLIN_DEFAULT_FOLDER, apply: bool = False):
     else:
         console.print(tf("Deleted {n} duplicates (see Joplin Trash).",
                          n=len(res['deleted'])))
+
+
+@app.command(name="telegram-test")
+def telegram_test():
+    """Check the Telegram bot token and send a test message."""
+    bot = _telegram_bot()
+    if not bot.token:
+        console.print(f"[red]{tr('Telegram token missing (Settings → Telegram)')}[/red]")
+        raise typer.Exit(1)
+    me = bot.me()
+    if me is None:
+        console.print(f"[red]{tf('Telegram error: {err}', err=bot.last_error)}[/red]")
+        raise typer.Exit(1)
+    name = me.get("username") or me.get("first_name") or "bot"
+    console.print(f"[green]{tf('Connected as @{name}', name=name)}[/green]")
+    if not bot.chat_id:
+        console.print(f"[yellow]{tr('No chat ID yet — send /start to the bot, then run telegram-chat-id')}[/yellow]")
+        return
+    if bot.send(tf("✅ Rakez CLI test — @{name}", name=name)):
+        console.print(f"[green]{tr('Test message sent')}[/green]")
+    else:
+        console.print(f"[red]{tf('Send failed: {err}', err=bot.last_error)}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command(name="telegram-chat-id")
+def telegram_chat_id():
+    """Detect the chat ID from the latest message sent to the bot."""
+    bot = _telegram_bot()
+    if not bot.token:
+        console.print(f"[red]{tr('Telegram token missing (Settings → Telegram)')}[/red]")
+        raise typer.Exit(1)
+    chat = bot.detect_chat_id()
+    if chat:
+        console.print(f"[green]{tf('Chat ID: {id}', id=chat)}[/green]")
+        console.print(tr("Save it in Settings → ✈️ Telegram (Chat ID) to receive reports."))
+    else:
+        console.print(f"[yellow]{tr('No messages found — send /start to your bot and try again.')}[/yellow]")
+
+
+@app.command(name="telegram-report")
+def telegram_report(send: bool = typer.Option(True, "--send/--no-send",
+                                              help="Send it to Telegram (default) or only print it")):
+    """Print the done-today + remaining-tasks report (and send it to Telegram)."""
+    bot = _telegram_bot()
+    report = bot.report_text(bot.storage)
+    console.print(_plain(report))
+    if not send:
+        return
+    if not bot.configured:
+        console.print(f"[yellow]{tr('Token or chat ID missing — report not sent.')}[/yellow]")
+        return
+    if bot.send(report):
+        console.print(f"[green]{tr('Report sent to Telegram')}[/green]")
+    else:
+        console.print(f"[red]{tf('Send failed: {err}', err=bot.last_error)}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command(name="telegram-poll")
+def telegram_poll():
+    """Run the bot command loop in the terminal (Ctrl+C to stop)."""
+    import time
+    bot = _telegram_bot()
+    if not bot.available:
+        console.print(f"[red]{tr('Telegram token missing (Settings → Telegram)')}[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]{tr('Listening for Telegram commands… Ctrl+C to stop')}[/green]")
+    try:
+        while True:
+            updates = bot.get_updates()
+            for update in updates:
+                bot.handle_update(update)
+            if not updates:
+                time.sleep(2)
+    except KeyboardInterrupt:
+        console.print(f"[yellow]{tr('Stopped')}[/yellow]")
 
 
 @app.command()

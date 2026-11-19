@@ -60,6 +60,14 @@
 - الإنجليزية هي الافتراضية، ويمكن اختيار العربية يدويًا أو تلقائيًا حسب لغة النظام عند أول تشغيل.
 - نفس الخيار في الطرفية: `python -m cli.app --lang ar projects`.
 
+### ✈️ بوت تلجرام
+- **تقارير جاهزة**: ما أُنجز اليوم + المهام المتبقية + نسبة كل مشروع + دقائق التركيز.
+- **تقرير يومي تلقائي** في الساعة التي تختارها (افتراضيًا 8 مساءً).
+- **إشعار فوري** عند إنجاز أي مهمة من البرنامج أو من الودجت العائم.
+- **إدارة كاملة من الهاتف**: `/add عنوان` لإضافة مهمة، `/done 3` لإنهاء المهمة الثالثة، `/tasks` و`/projects` و`/report`.
+- أي رسالة عادية للبوت تُضاف كمهمة جديدة — ويمكن إضافة المهمة داخل مشروع بـ `/add عنوان | مشروع`.
+- يعمل البوت في خلفية البرنامج (Long polling) فلا يتجمد أو يتأخر أي شيء.
+
 ---
 
 ## 📥 التنزيل | Download
@@ -104,7 +112,7 @@ python -m cli.app add "تصميم الصفحة" --project Website --priority hig
 python -m cli.app projects
 python -m cli.app stats --days 7
 python -m cli.app google-test          # فحص ربط Google
-python -m pytest tests -q              # 64 اختبارًا
+python -m pytest tests -q              # 87 اختبارًا
 ```
 
 ---
@@ -120,6 +128,8 @@ JOPLIN_BASE_URL=http://127.0.0.1:41184
 GOOGLE_CLIENT_ID=          # من Google Cloud Console (Desktop app)
 GOOGLE_CLIENT_SECRET=
 API_TOKEN=                 # لحماية الـ HTTP API المحلي (Bearer)
+TELEGRAM_BOT_TOKEN=        # توكن بوت من @BotFather (اختياري)
+TELEGRAM_CHAT_ID=          # معرّف محادثتك في تلجرام (اختياري)
 ```
 
 ### `config/config.yaml`
@@ -146,6 +156,16 @@ joplin:
 >
 > في وضع Testing تنتهي صلاحية التوكن كل 7 أيام. للحل الدائم: **Publish app** → In production (تظل شاشة "unverified" طبيعية لتطبيق شخصي).
 
+### ربط تلجرام (تقارير + إدارة مهام من الهاتف)
+
+1. افتح [@BotFather](https://t.me/BotFather) في تلجرام → `/newbot` → انسخ **Token**.
+2. في Rakez → **Settings → ✈️ Telegram**: الصق الـ Token.
+3. أرسل `/start` للبوت من تلجرام، ثم اضغط **🔎 Detect chat ID** (أو أرسل `/id` وانسخ الرقم).
+4. اضغط **🔌 Test** — ستصل رسالة تجريبية — ثم **📊 Send report now**.
+5. اختياريًا: فعّل **Notify me when a task is completed** و**Daily report at 20:00**.
+
+أوامر البوت: `/report` · `/tasks` · `/done N` · `/done id` · `/add عنوان | مشروع` · `/projects` · `/id` · `/help`.
+
 ---
 
 ## 🖥️ الاستخدام | Usage
@@ -158,7 +178,7 @@ joplin:
 | 📋 Tasks | إضافة/إتمام/حذف، مشاريع ونسبة إنجاز، دفع وسحب Joplin وGoogle |
 | 🧠 Hermes | خطة صباحية / حل عذر / مراجعة يومية |
 | 📊 Analytics | إحصاءات التركيز والتصنيفات وStreak |
-| ⚙️ Settings | الثيم، حجم/شفافية/تصميم الودجت، المفاتيح، Google، التحديثات |
+| ⚙️ Settings | الثيم، حجم/شفافية/تصميم الودجت، المفاتيح، Google، تلجرام، التحديثات |
 
 اختصارات: `Enter` لإضافة مهمة، `double-click` لإتمامها.
 
@@ -175,6 +195,10 @@ python -m cli.app stats --days 7
 python -m cli.app plan | python -m cli.app review
 python -m cli.app dedupe [--apply]
 python -m cli.app google-test [--authorize]
+python -m cli.app telegram-test                # فحص التوكن + رسالة تجريبية
+python -m cli.app telegram-chat-id             # اكتشاف معرّف المحادثة
+python -m cli.app telegram-report [--no-send]  # التقرير (وإرساله إلى تلجرام)
+python -m cli.app telegram-poll                # تشغيل البوت في الطرفية
 python -m cli.app serve --port 8765
 ```
 
@@ -205,7 +229,7 @@ python -m cli.app serve --port 8765
 ## 🧪 التطوير والبناء
 
 ```bash
-python -m pytest tests -q          # 64 اختبارًا
+python -m pytest tests -q          # 87 اختبارًا
 
 python packaging/build_windows.py  # dist/Rakez.exe
 iscc packaging/Rakez.iss           # dist/Rakez-Setup-<version>.exe
@@ -225,6 +249,7 @@ core/
   coach.py            Hermes (Gemini + Offline)
   joplin.py           عميل Joplin Web Clipper
   google_sync.py      Calendar + Tasks (OAuth2)
+  telegram.py         بوت تلجرام (تقارير + أوامر)
   updater.py          فحص/تنزيل/تثبيت التحديثات
   api.py              HTTP API محلي
   settings.py         الإعدادات والثيمات
@@ -232,7 +257,7 @@ cli/app.py            أوامر Typer
 config/               config.yaml + prompt.py
 website/              الموقع التسويقي (GitHub Pages)
 packaging/            PyInstaller + Inno Setup + Linux
-tests/                64 اختبارًا
+tests/                87 اختبارًا
 ```
 
 ---
