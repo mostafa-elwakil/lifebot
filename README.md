@@ -1,135 +1,135 @@
-﻿<div align="center">
+<div align="center">
 
 <img src="assets/logo.svg" width="88" alt="Rakez logo" />
 
 # Rakez ركّز
-**نظام إنتاجية شخصي كامل: بومودورو عائم + مهام ومشاريع + مدرب ذكي + مزامنة مع Joplin وGoogle.**
+**A complete personal productivity system: floating Pomodoro + tasks and projects + AI coach + Joplin and Google sync.**
 
 [![Release](https://img.shields.io/github/v/release/mostafa-elwakil/lifebot?label=latest&color=7aa2f7)](https://github.com/mostafa-elwakil/lifebot/releases/latest)
 [![Build](https://github.com/mostafa-elwakil/lifebot/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mostafa-elwakil/lifebot/actions/workflows/build-windows.yml)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB)](https://www.python.org/)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-9ece6a)](#-التنزيل)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-9ece6a)](#-download)
 
-**🌐 [العربية](README.md) · [English](README.en.md)**
+**🌐 [العربية](README.ar.md) · [English](README.md)**
 
-[التنزيل](#-التنزيل) · [المميزات](#-المميزات) · [الموقع](#-الموقع) · [الأسئلة الشائعة](#-استكشاف-الأخطاء)
+[Download](#-download) · [Features](#-features) · [Website](#-website) · [Troubleshooting](#-troubleshooting)
 
 </div>
 
 ---
 
-## ✨ المميزات | Features
+## ✨ Features
 
-### ⏱️ بومودورو عائم فوق كل البرامج
-- مؤقت Always-on-Top بتصاميم متعددة: **Glass Pill / Neon Card / Split Flip / Typewriter**.
-- فترات تركيز + بريك قصير/طويل تلقائي (كل 4 دورات)، أصوات تنبيه، إشعارات، ونسبة تقدم حية.
-- تشغيل/إيقاف، إعادة ضبط، تبديل المهمة من داخل الودجت نفسه.
+### ⏱️ A floating Pomodoro above every app
+- Always-on-top timer with several designs: **Glass Pill / Neon Card / Split Flip / Typewriter**.
+- Focus periods + automatic short/long breaks (long break every 4 cycles), sound alerts, notifications, and a live progress bar.
+- Play/pause, reset, and switch tasks right from the widget.
 
-### 📁 مشاريع ومهام بنسبة إنجاز
-- أنشئ **مشاريع** وضع فيها المهام، ويُحسب التقدم تلقائيًا: `2/5 (40%)`.
-- تجميع المهام تحت عنوان كل مشروع + قسم للمهام غير المصنفة.
-- نقل مهمة موجودة لمشروع، أو إنشاء مشروع جديد مباشرة من الحوار.
-- حذف مشروع لا يحذف مهامه — تصبح غير مصنفة.
+### 📁 Projects with progress
+- Create **projects**, put tasks inside them, and get the progress automatically: `2/5 (40%)`.
+- Tasks are grouped under each project header, plus a section for ungrouped tasks.
+- Move an existing task into a project, or create a new project from the same dialog.
+- Deleting a project keeps its tasks — they simply become ungrouped.
 
-### 🧠 Hermes AI Coach
-- خطة صباحية، حل الأعذار، ومراجعة يومية.
-- يعمل مع **Gemini** عند إضافة المفتاح، وبدونه يقدّم وضع **Offline** مفيدًا بدون إنترنت.
+### 🧠 Hermes AI coach
+- A morning plan, help resolving excuses, and a daily review.
+- Works with **Gemini** when you add a key; without one it offers a genuinely useful **Offline** mode.
 
-### 🔄 مزامنة ثنائية الاتجاه
-- **Joplin**: مهامك تظهر فورًا في `Projects/Lifebot/Tasks` مع tags وموعد استحقاق، وسحب مهام Joplin للبرنامج (زر Pull + تلقائي عند التشغيل). أمر `dedupe` لتنظيف التكرار.
-- **Google Tasks**: دفع/سحب المهام.
-- **Google Calendar**: تسجيل جلسات التركيز المنتهية كأحداث تلقائيًا.
-- **زر Test connection** يتحقق فعليًا من الصلاحيات، ورسائل أخطاء ودّية (مثل `access_denied` مع خطوات الحل).
+### 🔄 Two-way sync
+- **Joplin**: your tasks show up instantly in `Projects/Lifebot/Tasks` with tags and a due date, and you can pull Joplin to-dos into the app (Pull button + automatically on startup). The `dedupe` command cleans up duplicates.
+- **Google Tasks**: push/pull tasks.
+- **Google Calendar**: finished focus sessions are logged as events automatically.
+- **Test connection** really checks your permissions and returns friendly error messages (for example `access_denied` with the exact fix).
 
-### 📊 تحليلات وتقدّم
-- دقائق التركيز خلال 7 أيام، توزيع الدقائق حسب التصنيف، الأيام المتتالية (Streak)، المهام المنجزة.
+### 📊 Analytics and progress
+- Focus minutes over the last 7 days, minutes per category, streak, and completed tasks.
 
-### 🎨 مظهر فاتح وداكن
-- ثيم **Dark (Tokyo Night)** و**Light (Paper)** للنافذة والودجت.
-- تخصيص لون التمييز، حجم الودجت، شفافيته، وخلفيته (بما فيها خلفيات فاتحة).
+### 🎨 Light and dark themes
+- **Dark (Tokyo Night)** and **Light (Paper)** themes for both the dashboard and the widget.
+- Custom accent color, widget size, opacity, and background (including light backgrounds).
 
-### ⬆️ تحديثات بضغطة واحدة
-- البرنامج يفحص GitHub Releases عند التشغيل، ثم زر **Download & Install update** ينزّل المثبّت ويعرض نسبة التقدم ويثبّت ويغلق البرنامج تلقائيًا — بدون فتح صفحة الإصدارات.
+### ⬆️ One-click updates
+- The app checks GitHub Releases on startup; **Download & Install update** downloads the installer with a progress bar, installs it, and closes the app — no release page needed.
 
-### 💻 CLI + Local API
-- كل شيء متاح من الطرفية (إضافة/إتمام/إحصاءات/مشاريع/مزامنة).
-- HTTP API محلي للمصادقة والتكامل مع أدوات خارجية.
+### 💻 CLI + local API
+- Everything is available from the terminal (add/complete/stats/projects/sync).
+- A local HTTP API for integrations, protectable with a bearer token.
 
-### 🌐 واجهة عربية وإنجليزية
-- بدّل اللغة من **Settings → 🌐 Language** — النافذة والودجت وكل الرسائل تتغير فورًا بدون إعادة تشغيل.
-- الإنجليزية هي الافتراضية، ويمكن اختيار العربية يدويًا أو تلقائيًا حسب لغة النظام عند أول تشغيل.
-- نفس الخيار في الطرفية: `python -m cli.app --lang ar projects`.
+### 🌐 Arabic and English UI
+- Switch language in **Settings → 🌐 Language** — the window, the widget, and every message change instantly with no restart.
+- English is the default; Arabic can be picked manually or automatically from the system language on first run.
+- The same switch exists in the CLI: `python -m cli.app --lang ar projects`.
 
-### ✈️ بوت تلجرام
-- **تقارير جاهزة**: ما أُنجز اليوم + المهام المتبقية + نسبة كل مشروع + دقائق التركيز.
-- **تقرير يومي تلقائي** في الساعة التي تختارها (افتراضيًا 8 مساءً).
-- **إشعار فوري** عند إنجاز أي مهمة من البرنامج أو من الودجت العائم.
-- **إدارة كاملة من الهاتف**: `/add عنوان` لإضافة مهمة، `/done 3` لإنهاء المهمة الثالثة، `/tasks` و`/projects` و`/report`.
-- أي رسالة عادية للبوت تُضاف كمهمة جديدة — ويمكن إضافة المهمة داخل مشروع بـ `/add عنوان | مشروع`.
-- يعمل البوت في خلفية البرنامج (Long polling) فلا يتجمد أو يتأخر أي شيء.
+### ✈️ Telegram bot
+- **Ready-made reports**: what you finished today, the remaining tasks, per-project progress, and focus minutes.
+- **Automatic daily report** at the hour you choose (default 8 PM).
+- **Instant notification** whenever a task is completed — from the app or the floating widget.
+- **Full control from your phone**: `/add title` to add a task, `/done 3` to finish task number 3, `/tasks`, `/projects`, `/report`.
+- Any plain message to the bot becomes a new task, and `/add title | project` puts it inside a project.
+- Runs as background long polling, so it never freezes or slows the UI.
 
 ---
 
-## 📥 التنزيل | Download
+## 📥 Download
 
-> **Windows 10/11** — لا يحتاج Python.
+> **Windows 10/11** — no Python required.
 
-[**⬇️ تحميل أحدث نسخة (Rakez-Setup.exe)**](https://github.com/mostafa-elwakil/lifebot/releases/latest)
+[**⬇️ Download the latest release (Rakez-Setup.exe)**](https://github.com/mostafa-elwakil/lifebot/releases/latest)
 
-1. حمّل المثبّت وشغّله (اختر اختصار سطح المكتب إن أردت).
-2. افتح Rakez — بياناتك تُحفظ في `%APPDATA%\Rakez\data`.
-3. التحديثات القادمة بضغطة واحدة من: **Settings → Check for updates → Download & Install**.
+1. Download the installer and run it (optionally create a desktop shortcut).
+2. Open Rakez — your data is stored in `%APPDATA%\Rakez\data`.
+3. Future updates are one click away: **Settings → Check for updates → Download & Install**.
 
-> ملاحظة: الملف غير موقّع بشهادة Code Signing، فقد تظهر رسالة SmartScreen "Unknown publisher". اضغط **More info → Run anyway** — الناشر داخل خصائص الملف هو **Mostafa Elwakil**.
+> Note: the installer is not signed with a Code Signing certificate, so Windows SmartScreen may show “Unknown publisher”. Press **More info → Run anyway** — the publisher in the file properties is **Mostafa Elwakil**.
 >
-> Linux: `bash packaging/build_linux.sh` بعد تثبيت المتطلبات.
+> Linux: `bash packaging/build_linux.sh` after installing the requirements.
 
 ---
 
-## 🌐 الموقع
+## 🌐 Website
 
-الموقع التسويقي (GitHub Pages): **https://mostafa-elwakil.github.io/lifebot/** — ونسخته الإنجليزية: **/en/**
+Marketing site (GitHub Pages): **https://mostafa-elwakil.github.io/lifebot/** — Arabic version: **/ar/**
 
-المصدر داخل مجلد [`website/`](website) — صفحة عربية RTL في الجذر وصفحة إنجليزية تحت `en/`، مع زر تبديل لغة، ثيم فاتح/داكن، وتحميل تلقائي لأحدث إصدار.
+Source in [`website/`](website) — an English page at the root and an Arabic RTL page under `ar/`, with a language switch, a modern light/dark design, and automatic download of the latest release.
 
 ---
 
-## 🚀 التشغيل من المصدر | Quickstart
+## 🚀 Run from source | Quickstart
 
 ```bash
 git clone https://github.com/mostafa-elwakil/lifebot.git
 cd lifebot
 pip install -r requirements.txt
-cp .env.example .env        # اختياري — املأ ما تحتاجه
-python run_lifebot.py       # الواجهة الرسومية
+cp .env.example .env        # optional — fill in what you need
+python run_lifebot.py       # GUI
 ```
 
-جرّب من الطرفية:
+Try the CLI:
 
 ```bash
 python -m cli.app list
-python -m cli.app add "تصميم الصفحة" --project Website --priority high
+python -m cli.app add "Design the landing page" --project Website --priority high
 python -m cli.app projects
 python -m cli.app stats --days 7
-python -m cli.app google-test          # فحص ربط Google
-python -m pytest tests -q              # 87 اختبارًا
+python -m cli.app google-test          # check the Google connection
+python -m pytest tests -q              # 87 tests
 ```
 
 ---
 
-## ⚙️ الإعداد | Configuration
+## ⚙️ Configuration
 
-### متغيرات `.env` (كلها اختيارية)
+### `.env` variables (all optional)
 
 ```env
-GEMINI_API_KEY=            # مدرب Hermes أونلاين (بدونه وضع Offline)
+GEMINI_API_KEY=            # Hermes coach online (offline mode without it)
 JOPLIN_TOKEN=              # Joplin Desktop → Settings → Web Clipper
 JOPLIN_BASE_URL=http://127.0.0.1:41184
-GOOGLE_CLIENT_ID=          # من Google Cloud Console (Desktop app)
+GOOGLE_CLIENT_ID=          # from Google Cloud Console (Desktop app)
 GOOGLE_CLIENT_SECRET=
-API_TOKEN=                 # لحماية الـ HTTP API المحلي (Bearer)
-TELEGRAM_BOT_TOKEN=        # توكن بوت من @BotFather (اختياري)
-TELEGRAM_CHAT_ID=          # معرّف محادثتك في تلجرام (اختياري)
+API_TOKEN=                 # protects the local HTTP API (Bearer)
+TELEGRAM_BOT_TOKEN=        # bot token from @BotFather (optional)
+TELEGRAM_CHAT_ID=          # your Telegram chat ID (optional)
 ```
 
 ### `config/config.yaml`
@@ -138,148 +138,150 @@ TELEGRAM_CHAT_ID=          # معرّف محادثتك في تلجرام (اخت
 joplin:
   base_url: "http://127.0.0.1:41184"
   token: "YOUR_JOPLIN_TOKEN"
-  folder_name: "Projects/Lifebot/Tasks"   # يدعم المسارات المتداخلة وينشئ الناقص
-  tags: "task,lifebot"                    # تاجز لوحات Kanban
+  folder_name: "Projects/Lifebot/Tasks"   # nested paths supported, missing ones created
+  tags: "task,lifebot"                    # tags for Kanban boards
 ```
 
-> Joplin يحتاج **Joplin Desktop مفتوحًا** (Web Clipper على المنفذ `41184`). زر Synchronise غير مطلوب للإضافة.
+> Joplin requires **Joplin Desktop to be open** (Web Clipper on port `41184`). The Synchronise button is not needed to create notes.
 
-### ربط Google (Calendar + Tasks)
+### Connecting Google (Calendar + Tasks)
 
-1. [Google Cloud Console](https://console.cloud.google.com) → مشروع جديد.
-2. فعّل **Google Calendar API** و **Google Tasks API**.
-3. **OAuth consent screen** → External → أضف بريدك في **Test users**.
-4. **Credentials → Create OAuth client ID → Desktop app** → انسخ Client ID + Secret.
-5. داخل Rakez → **Settings**: الصق القيمتين → **🔓 Authorize** → **🔌 Test connection**.
+1. [Google Cloud Console](https://console.cloud.google.com) → new project.
+2. Enable **Google Calendar API** and **Google Tasks API**.
+3. **OAuth consent screen** → External → add your email under **Test users**.
+4. **Credentials → Create OAuth client ID → Desktop app** → copy the Client ID + Secret.
+5. Inside Rakez → **Settings**: paste both values → **🔓 Authorize** → **🔌 Test connection**.
 
-> ⚠️ إن ظهرت رسالة **"Access blocked: Rakez has not completed verification"** فمعناها أن حسابك ليس Test user. أضفه من OAuth consent screen → Test users. البرنامج يعرض لك هذه الخطوات تلقائيًا.
+> ⚠️ If you see **"Access blocked: Rakez has not completed verification"**, your account is not a Test user. Add it under OAuth consent screen → Test users. The app shows these steps automatically.
 >
-> في وضع Testing تنتهي صلاحية التوكن كل 7 أيام. للحل الدائم: **Publish app** → In production (تظل شاشة "unverified" طبيعية لتطبيق شخصي).
+> In Testing mode the token expires every 7 days. For a permanent fix: **Publish app** → In production (the “unverified” screen is normal for a personal app).
 
-### ربط تلجرام (تقارير + إدارة مهام من الهاتف)
+### Connecting Telegram (reports + remote tasks)
 
-1. افتح [@BotFather](https://t.me/BotFather) في تلجرام → `/newbot` → انسخ **Token**.
-2. في Rakez → **Settings → ✈️ Telegram**: الصق الـ Token.
-3. أرسل `/start` للبوت من تلجرام، ثم اضغط **🔎 Detect chat ID** (أو أرسل `/id` وانسخ الرقم).
-4. اضغط **🔌 Test** — ستصل رسالة تجريبية — ثم **📊 Send report now**.
-5. اختياريًا: فعّل **Notify me when a task is completed** و**Daily report at 20:00**.
+1. Open [@BotFather](https://t.me/BotFather) in Telegram → `/newbot` → copy the **Token**.
+2. In Rakez → **Settings → ✈️ Telegram**: paste the token.
+3. Send `/start` to your bot, then press **🔎 Detect chat ID** (or send `/id` and copy the number).
+4. Press **🔌 Test** — a test message arrives — then **📊 Send report now**.
+5. Optionally enable **Notify me when a task is completed** and **Daily report at 20:00**.
 
-أوامر البوت: `/report` · `/tasks` · `/done N` · `/done id` · `/add عنوان | مشروع` · `/projects` · `/id` · `/help`.
+Bot commands: `/report` · `/tasks` · `/done N` · `/done id` · `/add title | project` · `/projects` · `/id` · `/help`.
 
 ---
 
-## 🖥️ الاستخدام | Usage
+## 🖥️ Usage
 
-### الواجهة الرسومية
+### GUI
 
-| التبويب | الوظيفة |
+| Tab | What it does |
 |---|---|
-| ⏱️ Pomodoro | اختر مهمة ومدة → أرسلها للودجت العائم وابدأ |
-| 📋 Tasks | إضافة/إتمام/حذف، مشاريع ونسبة إنجاز، دفع وسحب Joplin وGoogle |
-| 🧠 Hermes | خطة صباحية / حل عذر / مراجعة يومية |
-| 📊 Analytics | إحصاءات التركيز والتصنيفات وStreak |
-| ⚙️ Settings | الثيم، حجم/شفافية/تصميم الودجت، المفاتيح، Google، تلجرام، التحديثات |
+| ⏱️ Pomodoro | Pick a task and duration → send it to the floating widget and start |
+| 📋 Tasks | Add/complete/delete, projects and progress, push/pull Joplin and Google |
+| 🧠 Hermes | Morning plan / resolve a snag / daily review |
+| 📊 Analytics | Focus stats, categories, and streak |
+| ⚙️ Settings | Theme, widget size/opacity/design, keys, Google, Telegram, updates, language |
 
-اختصارات: `Enter` لإضافة مهمة، `double-click` لإتمامها.
+Shortcuts: `Enter` to add a task, `double-click` to complete it.
 
-### سطر الأوامر
+### Command line
 
 ```bash
-python -m cli.app list                          # المهام المفتوحة
-python -m cli.app add "مهمة" -p Website        # إضافة داخل مشروع (ينشئه إن لزم)
-python -m cli.app projects                      # المشاريع وتقدمها
-python -m cli.app assign "مهمة" "مشروع"        # نقل مهمة إلى مشروع
+python -m cli.app list                          # open tasks
+python -m cli.app add "Task" -p Website        # add inside a project (creates it if new)
+python -m cli.app projects                      # projects and their progress
+python -m cli.app assign "Task" "Project"      # move a task into a project
 python -m cli.app done <id|title>
 python -m cli.app rm <id|title>
 python -m cli.app stats --days 7
 python -m cli.app plan | python -m cli.app review
 python -m cli.app dedupe [--apply]
 python -m cli.app google-test [--authorize]
-python -m cli.app telegram-test                # فحص التوكن + رسالة تجريبية
-python -m cli.app telegram-chat-id             # اكتشاف معرّف المحادثة
-python -m cli.app telegram-report [--no-send]  # التقرير (وإرساله إلى تلجرام)
-python -m cli.app telegram-poll                # تشغيل البوت في الطرفية
+python -m cli.app telegram-test                # token check + test message
+python -m cli.app telegram-chat-id             # detect the chat ID
+python -m cli.app telegram-report [--no-send]  # report (and send it)
+python -m cli.app telegram-poll                # run the bot in the terminal
 python -m cli.app serve --port 8765
+python -m cli.app --lang ar list               # Arabic output
 ```
 
 ---
 
-## 🔌 الـ HTTP API المحلي
+## 🔌 Local HTTP API
 
 ```bash
 python -m cli.app serve --port 8765
-# API_TOKEN=secret python -m cli.app serve    # يتطلب Authorization: Bearer <token>
+# API_TOKEN=secret python -m cli.app serve    # requires Authorization: Bearer <token>
 ```
 
-| الطلب | الوصف |
+| Request | Description |
 |---|---|
-| `GET /health` | فحص الحالة |
-| `GET /tasks` · `POST /tasks` | قائمة/إنشاء `{title, category?, priority?, estimate?, project_id?}` |
-| `PUT /tasks/<id-or-title>` | تحديث `{completed?, title?, category?, priority?, project_id?}` |
-| `DELETE /tasks/<id-or-title>` | حذف مهمة |
-| `GET /projects` | المشاريع مع `total/done/pct` |
-| `POST /projects` | إنشاء مشروع `{name}` |
-| `DELETE /projects/<id-or-name>` | حذف مشروع (المهام تبقى غير مصنفة) |
-| `GET /projects/<id>/tasks` | مهام مشروع (و`_NO_PROJECT_` لغير المصنفة) |
-| `GET /sessions` · `POST /sessions` | جلسات التركيز |
-| `GET /stats?days=7` | الإحصاءات |
+| `GET /health` | Health check |
+| `GET /tasks` · `POST /tasks` | List/create `{title, category?, priority?, estimate?, project_id?}` |
+| `PUT /tasks/<id-or-title>` | Update `{completed?, title?, category?, priority?, project_id?}` |
+| `DELETE /tasks/<id-or-title>` | Delete a task |
+| `GET /projects` | Projects with `total/done/pct` |
+| `POST /projects` | Create a project `{name}` |
+| `DELETE /projects/<id-or-name>` | Delete a project (its tasks stay ungrouped) |
+| `GET /projects/<id>/tasks` | Tasks of a project (`_NO_PROJECT_` for ungrouped) |
+| `GET /sessions` · `POST /sessions` | Focus sessions |
+| `GET /stats?days=7` | Statistics |
 
 ---
 
-## 🧪 التطوير والبناء
+## 🧪 Development and build
 
 ```bash
-python -m pytest tests -q          # 87 اختبارًا
+python -m pytest tests -q          # 87 tests
 
 python packaging/build_windows.py  # dist/Rakez.exe
 iscc packaging/Rakez.iss           # dist/Rakez-Setup-<version>.exe
 ```
 
-- الإصدار الحالي يُحدَّد في: `core/updater.py` (`APP_VERSION`)، `packaging/Rakez.iss`، `packaging/version_info.txt`.
-- **GitHub Actions** يبني ويختبر المثبّت على كل **tag** جديد (`v*`) وينشره تلقائيًا في Releases.
-- صفحات الموقع تُنشر تلقائيًا من `website/` عبر GitHub Pages.
+- The current version lives in: `core/updater.py` (`APP_VERSION`), `packaging/Rakez.iss`, `packaging/version_info.txt`.
+- **GitHub Actions** builds and tests the installer on every new **tag** (`v*`) and publishes it to Releases.
+- The marketing site is published automatically from `website/` via GitHub Pages.
 
-### هيكل المشروع
+### Project layout
 
 ```
-run_lifebot.py        الواجهة الرسومية (PyQt6) + الودجت العائم
+run_lifebot.py        GUI (PyQt6) + floating widget
 core/
-  models.py           نماذج المهمة
-  storage.py          SQLite + المشاريع + الهجرة من JSON
-  coach.py            Hermes (Gemini + Offline)
-  joplin.py           عميل Joplin Web Clipper
+  models.py           task models
+  storage.py          SQLite + projects + JSON migration
+  coach.py            Hermes (Gemini + offline)
+  joplin.py           Joplin Web Clipper client
   google_sync.py      Calendar + Tasks (OAuth2)
-  telegram.py         بوت تلجرام (تقارير + أوامر)
-  updater.py          فحص/تنزيل/تثبيت التحديثات
-  api.py              HTTP API محلي
-  settings.py         الإعدادات والثيمات
-cli/app.py            أوامر Typer
+  telegram.py         Telegram bot (reports + commands)
+  updater.py          update check/download/install
+  api.py              local HTTP API
+  i18n.py             English/Arabic strings + Qt translator
+  settings.py         settings and themes
+cli/app.py            Typer commands
 config/               config.yaml + prompt.py
-website/              الموقع التسويقي (GitHub Pages)
+website/              marketing site (GitHub Pages)
 packaging/            PyInstaller + Inno Setup + Linux
-tests/                87 اختبارًا
+tests/                87 tests
 ```
 
 ---
 
-## 🩺 استكشاف الأخطاء
+## 🩺 Troubleshooting
 
-| الحالة | الحل |
+| Symptom | Fix |
 |---|---|
-| `Joplin busy — wait and retry` | Joplin يعمل Sync — انتظر ثوانٍ وأعد المحاولة |
-| `Joplin not configured` | أضف `JOPLIN_TOKEN` أو الصقه في Settings |
-| Pull لا يجد مهام | يجب أن تكون **New to-do** داخل نفس الـ notebook |
-| `access_denied` من Google | أضف بريدك في Test users (الرسالة داخل البرنامج تشرح الخطوات) |
-| `invalid_client` | أعد نسخ Client ID/Secret وتأكد أن النوع **Desktop app** |
-| تحديث لا يظهر | تأكد من وجود اتصال، أو حمّل المثبّت يدويًا من Releases |
-| اختفاء البيانات بعد تحديث | بياناتك في `%APPDATA%\Rakez\data` ولا تُمسح بالتحديث |
+| `Joplin busy — wait and retry` | Joplin is syncing — wait a few seconds and retry |
+| `Joplin not configured` | Add `JOPLIN_TOKEN` or paste it in Settings |
+| Pull finds nothing | The to-do must be a **New to-do** inside the same notebook |
+| `access_denied` from Google | Add your email under Test users (the in-app message explains the steps) |
+| `invalid_client` | Re-copy the Client ID/Secret and make sure the type is **Desktop app** |
+| No update appears | Check your connection, or download the installer manually from Releases |
+| Data missing after an update | Your data is in `%APPDATA%\Rakez\data` and is never touched by updates |
 
 ---
 
 <div align="center">
 
-صُنع بـ ❤️ بواسطة **Mostafa Elwakil**
+Made with ❤️ by **Mostafa Elwakil**
 
-⭐ لو أعجبك المشروع، اعمله Star على GitHub
+⭐ If you like the project, give it a star on GitHub
 
 </div>
