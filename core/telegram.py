@@ -259,7 +259,7 @@ class TelegramBot:
         lines = [f"<b>{t('🤖 Rakez bot')}</b>", ""]
         if chat_id:
             lines.append(tf("Your chat ID is {id}.", id=chat_id))
-            lines.append(t("Save it in Settings → ✈️ Telegram to receive reports."))
+            lines.append(t("Save it in Settings → 🌐 API to receive reports."))
             lines.append("")
         lines += [
             t("/report — done today + remaining tasks"),

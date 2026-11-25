@@ -291,6 +291,76 @@ AR = {
     "✓ saved to settings.json": "✓ تم الحفظ في settings.json",
     "⚠ save failed": "⚠ فشل الحفظ",
 
+    # ---- settings: sidebar sections ----
+    "Settings": "الإعدادات",
+    "⚙️ General": "⚙️ عام",
+    "🎨 Appearance": "🎨 المظهر",
+    "🔳 Floating widget": "🔳 الودجت العائم",
+    "🔗 Integrations": "🔗 التكاملات",
+    "🌐 API": "🌐 API",
+    "⬆️ Updates": "⬆️ التحديثات",
+    "Language and notification sound for the whole app.":
+        "اللغة وصوت التنبيه لكل البرنامج.",
+    "The interface and the floating widget switch instantly.":
+        "تتغيّر الواجهة والودجت العائم فورًا.",
+    "Dashboard theme and the highlight color used across Rakez.":
+        "مظهر اللوحة ولون التمييز المستخدم في كل ركّز.",
+    "Shape, size, and transparency of the always-on-top timer. Changes preview immediately.":
+        "شكل وحجم وشفافية المؤقت الدائم فوق النوافذ. التغييرات تُعرض فورًا.",
+    "Connect Rakez to the services you already use. Tokens and client credentials live under API.":
+        "اربط ركّز بالخدمات التي تستخدمها. التوكنات وبيانات العميل في قسم API.",
+    "🔑 Edit API keys": "🔑 تعديل مفاتيح API",
+    "Jump to the API section to paste tokens and keys":
+        "الانتقال إلى قسم API للصق التوكنات والمفاتيح",
+    "🗒️ Joplin": "🗒️ Joplin",
+    "Base URL and notebook used when syncing tasks.":
+        "عنوان الخادم والدفتر المستخدمان عند مزامنة المهام.",
+    "📅 Google Calendar + Tasks": "📅 تقويم ومهام Google",
+    "Save the OAuth client ID and secret under API first, then authorize once here.":
+        "احفظ معرّف وسر عميل OAuth في قسم API أولًا ثم فوّض مرة واحدة هنا.",
+    "✈️ Telegram": "✈️ تلجرام",
+    "The bot token is stored under API. Any message you send to the bot becomes a task.":
+        "توكن البوت محفوظ في قسم API. أي رسالة ترسلها للبوت تُضاف كمهمة.",
+    "Rakez checks GitHub releases and can install a new version for you.":
+        "يتحقق ركّز من إصدارات GitHub ويمكنه تثبيت نسخة جديدة لك.",
+
+    # ---- settings: API section ----
+    "API keys": "مفاتيح API",
+    "Stored locally in settings.json. Press Save settings to apply them.":
+        "تُحفظ محليًا في settings.json. اضغط حفظ الإعدادات لتطبيقها.",
+    "🤖 Gemini API key": "🤖 مفتاح Gemini API",
+    "🗒️ Joplin token": "🗒️ توكن Joplin",
+    "📅 Google OAuth client": "📅 عميل Google OAuth",
+    "✈️ Telegram bot token": "✈️ توكن بوت تلجرام",
+    "Local HTTP API": "خادم HTTP المحلي",
+    "A small server on this computer lets other apps read and add your tasks. It listens on 127.0.0.1 only, so nothing is exposed to the network.":
+        "خادم صغير على هذا الجهاز يتيح لبرامج أخرى قراءة وإضافة مهامك. "
+        "يستمع على 127.0.0.1 فقط، فلا شيء مكشوف للشبكة.",
+    "Port:": "المنفذ:",
+    "API token (optional)": "توكن API (اختياري)",
+    "Leave empty for open local access": "اتركه فارغًا لوصول محلي مفتوح",
+    "If a token is set, clients must send: Authorization: Bearer <token>":
+        "إذا حُدد توكن، يجب أن يرسل العميل: Authorization: Bearer <token>",
+    "▶ Start": "▶ تشغيل",
+    "⏹ Stop": "⏹ إيقاف",
+    "Start the local HTTP server": "تشغيل خادم HTTP المحلي",
+    "Stop the local HTTP server": "إيقاف خادم HTTP المحلي",
+    "🧪 Test": "🧪 اختبار",
+    "Call /health and show the response": "استدعاء /health وعرض الرد",
+    "📋 Copy URL": "📋 نسخ الرابط",
+    "Copy the API base URL": "نسخ عنوان الـ API الأساسي",
+    "Endpoints: GET /health · GET|POST /tasks · PUT|DELETE /tasks/<id> · GET|POST /projects · GET|POST /sessions · GET /stats":
+        "المسارات: GET /health · GET|POST /tasks · PUT|DELETE /tasks/<id> · "
+        "GET|POST /projects · GET|POST /sessions · GET /stats",
+    "Status: stopped": "الحالة: متوقف",
+    "Status: running on {url}": "الحالة: يعمل على {url}",
+    "✓ API is healthy: {app}": "✓ الـ API يعمل: {app}",
+    "⚠ API test failed: {err}": "⚠ فشل اختبار API: {err}",
+    "Local API is not running.": "خادم API المحلي لا يعمل.",
+    "Could not start the local API server: {err}":
+        "تعذّر تشغيل خادم API المحلي: {err}",
+    "✓ Copied: {url}": "✓ نُسخ: {url}",
+
     # ---- updates ----
     "⏳ Checking...": "⏳ جارٍ الفحص...",
     "Checking GitHub for updates...": "جارٍ التحقق من GitHub...",
@@ -495,8 +565,8 @@ AR = {
     "🔥 Focus today: {n} min": "🔥 تركيز اليوم: {n} دقيقة",
     "🤖 Rakez bot": "🤖 بوت ركّز",
     "Your chat ID is {id}.": "معرّف محادثتك هو {id}.",
-    "Save it in Settings → ✈️ Telegram to receive reports.":
-        "احفظه في الإعدادات ← ✈️ تلجرام لتصلك التقارير.",
+    "Save it in Settings → 🌐 API to receive reports.":
+        "احفظه في الإعدادات ← 🌐 API لتصلك التقارير.",
     "/report — done today + remaining tasks":
         "/report — ما أُنجز اليوم + المهام المتبقية",
     "/tasks — numbered list of open tasks":
@@ -587,8 +657,8 @@ AR = {
     "Could not send the report:\n{err}": "تعذّر إرسال التقرير:\n{err}",
 
     # Telegram — CLI
-    "Telegram token missing (Settings → Telegram)":
-        "رمز بوت تلجرام مطلوب (الإعدادات ← تلجرام)",
+    "Telegram token missing (Settings → API)":
+        "رمز بوت تلجرام مطلوب (الإعدادات ← API)",
     "Telegram error: {err}": "خطأ تلجرام: {err}",
     "Connected as @{name}": "متصل كـ @{name}",
     "No chat ID yet — send /start to the bot, then run telegram-chat-id":
@@ -596,8 +666,8 @@ AR = {
     "Test message sent": "أُرسلت الرسالة التجريبية",
     "Send failed: {err}": "فشل الإرسال: {err}",
     "Chat ID: {id}": "معرّف المحادثة: {id}",
-    "Save it in Settings → ✈️ Telegram (Chat ID) to receive reports.":
-        "احفظه في الإعدادات ← ✈️ تلجرام (معرّف المحادثة) لتصلك التقارير.",
+    "Save it in Settings → 🔗 Integrations (Chat ID) to receive reports.":
+        "احفظه في الإعدادات ← 🔗 Integrations (معرّف المحادثة) لتصلك التقارير.",
     "No messages found — send /start to your bot and try again.":
         "لا رسائل موجودة — أرسل /start للبوت وحاول مرة أخرى.",
     "Token or chat ID missing — report not sent.":

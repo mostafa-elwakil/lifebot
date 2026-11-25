@@ -26,6 +26,9 @@ DEFAULTS = {
     "telegram_reports": True,      # send a message whenever a task is completed
     "telegram_daily": False,       # send the daily report automatically
     "telegram_daily_hour": 20,     # 0-23 local time
+    # --- local HTTP API (Settings → API) ---
+    "api_port": 8765,
+    "api_token": "",
 }
 
 ACCENTS = {
@@ -138,6 +141,11 @@ def load_settings(data_dir: str | Path) -> dict:
         cfg["telegram_daily_hour"] = max(0, min(23, int(cfg.get("telegram_daily_hour", 20))))
     except (TypeError, ValueError):
         cfg["telegram_daily_hour"] = 20
+    try:
+        cfg["api_port"] = max(1024, min(65535, int(cfg.get("api_port", 8765))))
+    except (TypeError, ValueError):
+        cfg["api_port"] = 8765
+    cfg["api_token"] = str(cfg.get("api_token") or "").strip()
     return cfg
 
 

@@ -179,9 +179,14 @@ class ApiHandler(BaseHTTPRequestHandler):
     do_GET = do_POST = do_PUT = do_DELETE = _handle
 
 
-def run_server(port: int = 8765, data_dir=None, block: bool = True):
-    """Start the API server. Returns (server, thread) when block=False."""
-    store = SqliteStorage(data_dir=data_dir) if data_dir else SqliteStorage()
+def run_server(port: int = 8765, data_dir=None, block: bool = True, store=None):
+    """Start the API server. Returns (server, thread) when block=False.
+
+    Pass ``store`` to reuse an existing SqliteStorage (the desktop app does),
+    or ``data_dir`` to open a dedicated database.
+    """
+    if store is None:
+        store = SqliteStorage(data_dir=data_dir) if data_dir else SqliteStorage()
     server = ThreadingHTTPServer(("127.0.0.1", port), ApiHandler)
     server.store = store  # type: ignore[attr-defined]
     if block:

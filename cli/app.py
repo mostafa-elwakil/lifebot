@@ -244,7 +244,7 @@ def telegram_test():
     """Check the Telegram bot token and send a test message."""
     bot = _telegram_bot()
     if not bot.token:
-        console.print(f"[red]{tr('Telegram token missing (Settings → Telegram)')}[/red]")
+        console.print(f"[red]{tr('Telegram token missing (Settings → API)')}[/red]")
         raise typer.Exit(1)
     me = bot.me()
     if me is None:
@@ -267,12 +267,12 @@ def telegram_chat_id():
     """Detect the chat ID from the latest message sent to the bot."""
     bot = _telegram_bot()
     if not bot.token:
-        console.print(f"[red]{tr('Telegram token missing (Settings → Telegram)')}[/red]")
+        console.print(f"[red]{tr('Telegram token missing (Settings → API)')}[/red]")
         raise typer.Exit(1)
     chat = bot.detect_chat_id()
     if chat:
         console.print(f"[green]{tf('Chat ID: {id}', id=chat)}[/green]")
-        console.print(tr("Save it in Settings → ✈️ Telegram (Chat ID) to receive reports."))
+        console.print(tr("Save it in Settings → 🔗 Integrations (Chat ID) to receive reports."))
     else:
         console.print(f"[yellow]{tr('No messages found — send /start to your bot and try again.')}[/yellow]")
 
@@ -302,7 +302,7 @@ def telegram_poll():
     import time
     bot = _telegram_bot()
     if not bot.available:
-        console.print(f"[red]{tr('Telegram token missing (Settings → Telegram)')}[/red]")
+        console.print(f"[red]{tr('Telegram token missing (Settings → API)')}[/red]")
         raise typer.Exit(1)
     console.print(f"[green]{tr('Listening for Telegram commands… Ctrl+C to stop')}[/green]")
     try:

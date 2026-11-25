@@ -1,7 +1,9 @@
-﻿import sys
+import sys
 import os
+import json
 import tempfile
 import threading
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -18,7 +20,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QComboBox, QSpinBox, QMessageBox,
     QInputDialog, QSystemTrayIcon, QMenu,
     QCheckBox, QSizePolicy, QSizeGrip, QProgressBar, QGridLayout, QFrame,
-    QScrollArea
+    QScrollArea, QStackedWidget, QButtonGroup
 )
 
 from core.storage import SqliteStorage, CATEGORIES
@@ -29,6 +31,7 @@ from core.settings import (SOUND_NAMES, DESIGNS, BACKGROUNDS, THEMES,
                            THEME_BACKGROUNDS, valid_hex, is_light_color)
 from core.google_sync import GoogleSync
 from core.telegram import TelegramBot
+from core.api import run_server
 from core.i18n import (LANGUAGES, detect_language, get_language, is_arabic,
                        set_language, t, tf, translate_tree)
 from core import updater
@@ -1038,6 +1041,14 @@ class RakezMainWindow(QMainWindow):
             storage=self.storage)
         self._telegram_poller = None
         self._telegram_last_daily = ""
+        # settings sidebar remembers the section across language switches
+        self._settings_section_index = 0
+        # the active top-level tab is preserved when the UI is rebuilt
+        self._active_tab_index = 0
+        # local HTTP API server state (started from Settings → API)
+        self._api_server = None
+        self._api_thread = None
+        self._api_fingerprint = None
         self.theme = self.app_settings.get("theme", "dark")
         lang = self.app_settings.get("language") or ""
         if lang not in ("en", "ar"):
@@ -1057,6 +1068,10 @@ class RakezMainWindow(QMainWindow):
         self._settings_save_timer.setSingleShot(True)
         self._settings_save_timer.timeout.connect(
             lambda: save_settings(DATA_DIR, self.app_settings))
+        # Settings → API: refresh the task lists when tasks change through HTTP
+        self._api_watch_timer = QTimer(self)
+        self._api_watch_timer.setInterval(5000)
+        self._api_watch_timer.timeout.connect(self._api_watch)
         # apply saved widget look
         self.floating_widget.background = self.app_settings.get("background", "#1a1b26")
         self.floating_widget.accent = self.app_settings.get("accent", "#7aa2f7")
@@ -1089,6 +1104,8 @@ class RakezMainWindow(QMainWindow):
             bg, panel, border = "#1a1b26", "#1f2335", "#292e42"
             text, muted, accent, accent2 = "#c0caf5", "#565f89", "#7aa2f7", "#bb9af7"
             btn_bg, hover_text, input_bg = "#24283b", "#1a1b26", "#24283b"
+        sidebar_border = "border-left" if is_arabic() else "border-right"
+        nav_align = "right" if is_arabic() else "left"
         self.setStyleSheet(f"""
             QMainWindow, QWidget {{ background-color: {bg}; color: {text}; font-family: 'Segoe UI', sans-serif; }}
             QTabWidget::pane {{ border: 1px solid {border}; background-color: {panel}; border-radius: 8px; }}
@@ -1111,6 +1128,37 @@ class RakezMainWindow(QMainWindow):
             }}
             QCheckBox {{ color: {text}; }}
             QScrollArea, QScrollBar:vertical {{ background-color: {panel}; }}
+            QStackedWidget#settingsStack, QWidget#settingsSection {{
+                background-color: {panel};
+            }}
+            QWidget#settingsSidebar {{
+                background-color: {panel}; {sidebar_border}: 1px solid {border};
+            }}
+            QFrame#settingsSidebarLine {{
+                background-color: {border}; border: none; max-width: 1px;
+            }}
+            QLabel#settingsSidebarTitle {{ color: {accent2}; }}
+            QPushButton#settingsNavButton {{
+                background-color: transparent; border: 1px solid transparent;
+                border-radius: 7px; color: {text}; font-weight: normal;
+                padding: 9px 10px; text-align: {nav_align};
+            }}
+            QPushButton#settingsNavButton:hover {{
+                background-color: {btn_bg}; color: {accent};
+            }}
+            QPushButton#settingsNavButton:checked {{
+                background-color: {accent}; color: {hover_text}; font-weight: bold;
+            }}
+            QPushButton#settingsSaveButton {{
+                background-color: {accent}; color: {hover_text}; border: none;
+            }}
+            QPushButton#settingsSaveButton:hover {{
+                background-color: {accent2}; color: {hover_text};
+            }}
+            QLabel[muted="true"] {{ color: {muted}; }}
+            QFrame[muted="true"] {{
+                background-color: {border}; border: none; max-height: 1px;
+            }}
         """)
         # labels created with inline styles (inline wins over the stylesheet)
         if hasattr(self, "title_label"):
@@ -1119,6 +1167,8 @@ class RakezMainWindow(QMainWindow):
             self.status_label.setStyleSheet(f"color: {muted};")
         if hasattr(self, "update_label"):
             self.update_label.setStyleSheet(f"color: {muted};")
+        if hasattr(self, "api_status_label"):
+            self._refresh_api_status()
 
     def _apply_theme_choice(self, name: str):
         """Settings dropdown → switch the whole app palette instantly."""
@@ -1205,10 +1255,17 @@ class RakezMainWindow(QMainWindow):
         tabs.addTab(self._create_coach_tab(), "🧠 Hermes AI Coach")
         tabs.addTab(self._create_analytics_tab(), "📊 Analytics")
         tabs.addTab(self._create_settings_tab(), "⚙️ Settings")
+        tabs.currentChanged.connect(self._remember_tab)
+        tabs.setCurrentIndex(
+            min(int(getattr(self, "_active_tab_index", 0)), tabs.count() - 1))
+        self.tabs = tabs
         layout.addWidget(tabs)
 
         self.setCentralWidget(main_widget)
         translate_tree(self)
+
+    def _remember_tab(self, index: int):
+        self._active_tab_index = index
 
     # ---- tabs ----
     def _create_pomodoro_tab(self):
@@ -1379,12 +1436,192 @@ class RakezMainWindow(QMainWindow):
         self._load_analytics()
         return tab
 
-    def _create_settings_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        s = self.app_settings
+    # ---- settings: sidebar + stacked sections ----
 
-        # --- appearance theme ---
+    def _create_settings_tab(self):
+        page = QWidget()
+        outer = QHBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        sidebar = QWidget()
+        sidebar.setObjectName("settingsSidebar")
+        sidebar.setFixedWidth(196)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(12, 14, 12, 14)
+        side.setSpacing(4)
+
+        side_title = QLabel("Settings")
+        side_title.setObjectName("settingsSidebarTitle")
+        side_title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        side.addWidget(side_title)
+        side.addSpacing(6)
+
+        self._settings_stack = QStackedWidget()
+        self._settings_stack.setObjectName("settingsStack")
+        self._settings_section_ids = []
+        self._settings_nav_buttons = []
+        self._settings_nav_group = QButtonGroup(page)
+        self._settings_nav_group.setExclusive(True)
+
+        sections = (
+            ("general", "⚙️ General", self._settings_general_section),
+            ("appearance", "🎨 Appearance", self._settings_appearance_section),
+            ("widget", "🔳 Floating widget", self._settings_widget_section),
+            ("integrations", "🔗 Integrations", self._settings_integrations_section),
+            ("api", "🌐 API", self._settings_api_section),
+            ("updates", "⬆️ Updates", self._settings_updates_section),
+        )
+        for index, (section_id, label, builder) in enumerate(sections):
+            btn = QPushButton(label)
+            btn.setObjectName("settingsNavButton")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(
+                lambda _checked=False, i=index: self._show_settings_section(i))
+            self._settings_nav_group.addButton(btn, index)
+            self._settings_nav_buttons.append(btn)
+            side.addWidget(btn)
+            self._settings_stack.addWidget(self._settings_page(builder()))
+            self._settings_section_ids.append(section_id)
+
+        side.addStretch(1)
+
+        save_btn = QPushButton("💾 Save settings")
+        save_btn.setObjectName("settingsSaveButton")
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.clicked.connect(self._save_settings)
+        side.addWidget(save_btn)
+
+        self.settings_status = QLabel("")
+        self.settings_status.setFont(QFont("Segoe UI", 8))
+        self.settings_status.setWordWrap(True)
+        self.settings_status.setProperty("muted", True)
+        side.addWidget(self.settings_status)
+
+        divider = QFrame()
+        divider.setObjectName("settingsSidebarLine")
+        divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setFrameShadow(QFrame.Shadow.Plain)
+
+        outer.addWidget(sidebar)
+        outer.addWidget(divider)
+        outer.addWidget(self._settings_stack, stretch=1)
+
+        index = max(0, min(int(getattr(self, "_settings_section_index", 0) or 0),
+                           len(self._settings_section_ids) - 1))
+        self._show_settings_section(index)
+        return page
+
+    def _settings_page(self, content: QWidget) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(content)
+        return scroll
+
+    def _settings_section(self):
+        body = QWidget()
+        body.setObjectName("settingsSection")
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(24, 18, 24, 18)
+        layout.setSpacing(9)
+        return body, layout
+
+    def _settings_heading(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        return label
+
+    def _settings_subheading(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        label.setContentsMargins(0, 6, 0, 0)
+        return label
+
+    def _settings_hint(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setFont(QFont("Segoe UI", 8))
+        label.setWordWrap(True)
+        label.setProperty("muted", True)
+        return label
+
+    def _settings_rule(self) -> QFrame:
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Plain)
+        line.setProperty("muted", True)
+        return line
+
+    def _show_settings_section(self, index: int):
+        stack = getattr(self, "_settings_stack", None)
+        if stack is None or stack.count() == 0:
+            return
+        index = max(0, min(int(index), stack.count() - 1))
+        stack.setCurrentIndex(index)
+        self._settings_section_index = index
+        for i, btn in enumerate(getattr(self, "_settings_nav_buttons", [])):
+            wanted = (i == index)
+            if btn.isChecked() != wanted:
+                btn.setChecked(wanted)
+
+    def _jump_to_settings(self, section_id: str):
+        ids = getattr(self, "_settings_section_ids", [])
+        if section_id in ids:
+            self._show_settings_section(ids.index(section_id))
+
+    # ---- settings sections ----
+
+    def _settings_general_section(self) -> QWidget:
+        s = self.app_settings
+        body, layout = self._settings_section()
+        layout.addWidget(self._settings_heading("General"))
+        layout.addWidget(self._settings_hint(
+            "Language and notification sound for the whole app."))
+
+        layout.addSpacing(6)
+        layout.addWidget(QLabel("🌐 Language:"))
+        lang_row = QHBoxLayout()
+        self.lang_combo = QComboBox()
+        for label, code in LANGUAGES.items():
+            self.lang_combo.addItem(label, code)
+        self.lang_combo.setMinimumWidth(200)
+        self.lang_combo.setCurrentIndex(
+            max(0, self.lang_combo.findData(get_language())))
+        self.lang_combo.currentIndexChanged.connect(self._change_language)
+        lang_row.addWidget(self.lang_combo)
+        lang_row.addStretch()
+        layout.addLayout(lang_row)
+        layout.addWidget(self._settings_hint(
+            "The interface and the floating widget switch instantly."))
+
+        layout.addSpacing(10)
+        layout.addWidget(QLabel("🔔 Notification sound:"))
+        sound_row = QHBoxLayout()
+        self.sound_combo = QComboBox()
+        self.sound_combo.addItems(SOUND_NAMES)
+        cur_sound = s.get("sound", "Default beep")
+        if cur_sound in SOUND_NAMES:
+            self.sound_combo.setCurrentText(cur_sound)
+        self.sound_combo.currentTextChanged.connect(self._apply_sound)
+        sound_row.addWidget(self.sound_combo)
+        sound_test = QPushButton("🔊 Test")
+        sound_test.setToolTip("Preview the selected sound")
+        sound_test.clicked.connect(self._test_sound)
+        sound_row.addWidget(sound_test)
+        sound_row.addStretch()
+        layout.addLayout(sound_row)
+        layout.addStretch(1)
+        return body
+
+    def _settings_appearance_section(self) -> QWidget:
+        s = self.app_settings
+        body, layout = self._settings_section()
+        layout.addWidget(self._settings_heading("Appearance"))
+        layout.addWidget(self._settings_hint(
+            "Dashboard theme and the highlight color used across Rakez."))
+
+        layout.addSpacing(6)
         layout.addWidget(QLabel("🎨 Theme:"))
         theme_row = QHBoxLayout()
         self.theme_combo = QComboBox()
@@ -1395,26 +1632,37 @@ class RakezMainWindow(QMainWindow):
                 break
         self.theme_combo.currentTextChanged.connect(self._apply_theme_choice)
         theme_row.addWidget(self.theme_combo)
-        theme_hint = QLabel("Light mode applies to the dashboard and the floating widget.")
-        theme_hint.setFont(QFont("Segoe UI", 8))
-        theme_hint.setStyleSheet("color: #6b7280;")
-        theme_row.addWidget(theme_hint, stretch=1)
+        theme_row.addStretch()
         layout.addLayout(theme_row)
+        layout.addWidget(self._settings_hint(
+            "Light mode applies to the dashboard and the floating widget."))
 
-        # --- language ---
-        layout.addWidget(QLabel("🌐 Language:"))
-        lang_row = QHBoxLayout()
-        self.lang_combo = QComboBox()
-        for label, code in LANGUAGES.items():
-            self.lang_combo.addItem(label, code)
-        self.lang_combo.setCurrentIndex(
-            max(0, self.lang_combo.findData(get_language())))
-        self.lang_combo.currentIndexChanged.connect(self._change_language)
-        lang_row.addWidget(self.lang_combo)
-        lang_row.addStretch()
-        layout.addLayout(lang_row)
+        layout.addSpacing(10)
+        layout.addWidget(QLabel("🎨 Accent color:"))
+        accent_row = QHBoxLayout()
+        self.accent_combo = QComboBox()
+        self.accent_combo.addItems(list(ACCENTS.keys()))
+        cur_hex = s.get("accent", "#7aa2f7")
+        for name, hx in ACCENTS.items():
+            if hx == cur_hex:
+                self.accent_combo.setCurrentText(name)
+                break
+        self.accent_combo.currentTextChanged.connect(self._apply_accent)
+        accent_row.addWidget(self.accent_combo)
+        accent_row.addStretch()
+        layout.addLayout(accent_row)
+        layout.addStretch(1)
+        return body
 
-        # --- widget size ---
+    def _settings_widget_section(self) -> QWidget:
+        s = self.app_settings
+        body, layout = self._settings_section()
+        layout.addWidget(self._settings_heading("Floating widget"))
+        layout.addWidget(self._settings_hint(
+            "Shape, size, and transparency of the always-on-top timer. "
+            "Changes preview immediately."))
+
+        layout.addSpacing(6)
         layout.addWidget(QLabel("🔳 Floating widget size:"))
         size_row = QHBoxLayout()
         size_row.addWidget(QLabel("Width:"))
@@ -1433,22 +1681,7 @@ class RakezMainWindow(QMainWindow):
         size_row.addStretch()
         layout.addLayout(size_row)
 
-        # --- accent color ---
-        layout.addWidget(QLabel("🎨 Accent color:"))
-        accent_row = QHBoxLayout()
-        self.accent_combo = QComboBox()
-        self.accent_combo.addItems(list(ACCENTS.keys()))
-        cur_hex = s.get("accent", "#7aa2f7")
-        for name, hx in ACCENTS.items():
-            if hx == cur_hex:
-                self.accent_combo.setCurrentText(name)
-                break
-        self.accent_combo.currentTextChanged.connect(self._apply_accent)
-        accent_row.addWidget(self.accent_combo)
-        accent_row.addStretch()
-        layout.addLayout(accent_row)
-
-        # --- widget design + background ---
+        layout.addSpacing(10)
         layout.addWidget(QLabel("🖌️ Widget design & background:"))
         design_row = QHBoxLayout()
         design_row.addWidget(QLabel("Design:"))
@@ -1474,7 +1707,7 @@ class RakezMainWindow(QMainWindow):
         design_row.addStretch()
         layout.addLayout(design_row)
 
-        # --- transparency ---
+        layout.addSpacing(10)
         layout.addWidget(QLabel("🔆 Widget transparency:"))
         op_row = QHBoxLayout()
         op_row.addWidget(QLabel("Opacity:"))
@@ -1486,38 +1719,30 @@ class RakezMainWindow(QMainWindow):
         op_row.addWidget(self.opacity_spin)
         op_row.addStretch()
         layout.addLayout(op_row)
+        layout.addStretch(1)
+        return body
 
-        # --- notification sound ---
-        layout.addWidget(QLabel("🔔 Notification sound:"))
-        sound_row = QHBoxLayout()
-        self.sound_combo = QComboBox()
-        self.sound_combo.addItems(SOUND_NAMES)
-        cur_sound = s.get("sound", "Default beep")
-        if cur_sound in SOUND_NAMES:
-            self.sound_combo.setCurrentText(cur_sound)
-        self.sound_combo.currentTextChanged.connect(self._apply_sound)
-        sound_row.addWidget(self.sound_combo)
-        sound_test = QPushButton("🔊 Test")
-        sound_test.setToolTip("Preview the selected sound")
-        sound_test.clicked.connect(self._test_sound)
-        sound_row.addWidget(sound_test)
-        sound_row.addStretch()
-        layout.addLayout(sound_row)
+    def _settings_integrations_section(self) -> QWidget:
+        s = self.app_settings
+        body, layout = self._settings_section()
+        layout.addWidget(self._settings_heading("Integrations"))
+        layout.addWidget(self._settings_hint(
+            "Connect Rakez to the services you already use. "
+            "Tokens and client credentials live under API."))
 
-        # --- API keys (no .env needed) ---
-        layout.addWidget(QLabel("🔑 API keys (saved locally, applied instantly):"))
-        self.gemini_edit = QLineEdit()
-        self.gemini_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.gemini_edit.setPlaceholderText("GEMINI_API_KEY (empty = offline coach)")
-        self.gemini_edit.setText(s.get("gemini_key", "") or os.getenv("GEMINI_API_KEY", ""))
-        layout.addWidget(self.gemini_edit)
+        keys_row = QHBoxLayout()
+        keys_btn = QPushButton("🔑 Edit API keys")
+        keys_btn.setToolTip("Jump to the API section to paste tokens and keys")
+        keys_btn.clicked.connect(lambda: self._jump_to_settings("api"))
+        keys_row.addWidget(keys_btn)
+        keys_row.addStretch()
+        layout.addLayout(keys_row)
 
-        self.joplin_token_edit = QLineEdit()
-        self.joplin_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.joplin_token_edit.setPlaceholderText("JOPLIN_TOKEN (Joplin → Web Clipper)")
-        self.joplin_token_edit.setText(s.get("joplin_token", ""))
-        layout.addWidget(self.joplin_token_edit)
-
+        # --- Joplin ---
+        layout.addSpacing(8)
+        layout.addWidget(self._settings_subheading("🗒️ Joplin"))
+        layout.addWidget(self._settings_hint(
+            "Base URL and notebook used when syncing tasks."))
         base_row = QHBoxLayout()
         base_row.addWidget(QLabel("Base:"))
         self.joplin_base_edit = QLineEdit()
@@ -1533,19 +1758,13 @@ class RakezMainWindow(QMainWindow):
         base_row.addWidget(self.joplin_tags_edit, stretch=1)
         layout.addLayout(base_row)
 
-        # --- Google (Calendar + Tasks) ---
-        layout.addWidget(QLabel("📅 Google Calendar + Tasks (OAuth client from Google Cloud Console):"))
+        # --- Google ---
+        layout.addSpacing(8)
+        layout.addWidget(self._settings_subheading("📅 Google Calendar + Tasks"))
+        layout.addWidget(self._settings_hint(
+            "Save the OAuth client ID and secret under API first, "
+            "then authorize once here."))
         grow = QHBoxLayout()
-        grow.addWidget(QLabel("Client ID:"))
-        self.google_id_edit = QLineEdit()
-        self.google_id_edit.setPlaceholderText("...apps.googleusercontent.com")
-        self.google_id_edit.setText(s.get("google_client_id", ""))
-        grow.addWidget(self.google_id_edit, stretch=2)
-        grow.addWidget(QLabel("Secret:"))
-        self.google_secret_edit = QLineEdit()
-        self.google_secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.google_secret_edit.setText(s.get("google_client_secret", ""))
-        grow.addWidget(self.google_secret_edit, stretch=2)
         auth_btn = QPushButton("🔓 Authorize")
         auth_btn.setToolTip("Open browser once to grant access")
         auth_btn.clicked.connect(self._authorize_google)
@@ -1554,16 +1773,16 @@ class RakezMainWindow(QMainWindow):
         test_btn.setToolTip("Real API check: Google Tasks list + Calendar events access")
         test_btn.clicked.connect(self._test_google_connection)
         grow.addWidget(test_btn)
+        grow.addStretch()
         layout.addLayout(grow)
 
-        # --- Telegram (reports + remote tasks) ---
-        layout.addWidget(QLabel("✈️ Telegram (reports + add/complete tasks from your phone):"))
+        # --- Telegram ---
+        layout.addSpacing(8)
+        layout.addWidget(self._settings_subheading("✈️ Telegram"))
+        layout.addWidget(self._settings_hint(
+            "The bot token is stored under API. Any message you send to the "
+            "bot becomes a task."))
         tg_row = QHBoxLayout()
-        self.tg_token_edit = QLineEdit()
-        self.tg_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.tg_token_edit.setPlaceholderText("Bot token from @BotFather")
-        self.tg_token_edit.setText(s.get("telegram_token", ""))
-        tg_row.addWidget(self.tg_token_edit, stretch=2)
         tg_row.addWidget(QLabel("Chat ID:"))
         self.tg_chat_edit = QLineEdit()
         self.tg_chat_edit.setPlaceholderText("Send /start to the bot, then Detect")
@@ -1591,24 +1810,134 @@ class RakezMainWindow(QMainWindow):
         self.tg_reports_check = QCheckBox("Notify me when a task is completed")
         self.tg_reports_check.setChecked(bool(s.get("telegram_reports", True)))
         tg_opts.addWidget(self.tg_reports_check)
+        tg_opts.addStretch()
+        layout.addLayout(tg_opts)
+
+        tg_daily = QHBoxLayout()
         self.tg_daily_check = QCheckBox("Daily report at")
         self.tg_daily_check.setChecked(bool(s.get("telegram_daily", False)))
-        tg_opts.addWidget(self.tg_daily_check)
+        tg_daily.addWidget(self.tg_daily_check)
         self.tg_hour_spin = QSpinBox()
         self.tg_hour_spin.setRange(0, 23)
         self.tg_hour_spin.setSuffix(":00")
         self.tg_hour_spin.setValue(int(s.get("telegram_daily_hour", 20)))
-        tg_opts.addWidget(self.tg_hour_spin)
-        tg_opts.addStretch()
-        layout.addLayout(tg_opts)
+        tg_daily.addWidget(self.tg_hour_spin)
+        tg_daily.addStretch()
+        layout.addLayout(tg_daily)
 
         self.telegram_status_label = QLabel("")
         self.telegram_status_label.setFont(QFont("Segoe UI", 8))
-        self.telegram_status_label.setStyleSheet("color: #565f89;")
+        self.telegram_status_label.setProperty("muted", True)
         layout.addWidget(self.telegram_status_label)
+        layout.addStretch(1)
+        return body
 
-        # --- update check ---
-        layout.addWidget(QLabel("⬆️ Updates:"))
+    def _settings_api_section(self) -> QWidget:
+        s = self.app_settings
+        body, layout = self._settings_section()
+        layout.addWidget(self._settings_heading("API keys"))
+        layout.addWidget(self._settings_hint(
+            "Stored locally in settings.json. Press Save settings to apply them."))
+
+        layout.addSpacing(6)
+        layout.addWidget(QLabel("🤖 Gemini API key"))
+        self.gemini_edit = QLineEdit()
+        self.gemini_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.gemini_edit.setPlaceholderText("GEMINI_API_KEY (empty = offline coach)")
+        self.gemini_edit.setText(s.get("gemini_key", "") or os.getenv("GEMINI_API_KEY", ""))
+        layout.addWidget(self.gemini_edit)
+
+        layout.addSpacing(8)
+        layout.addWidget(QLabel("🗒️ Joplin token"))
+        self.joplin_token_edit = QLineEdit()
+        self.joplin_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.joplin_token_edit.setPlaceholderText("JOPLIN_TOKEN (Joplin → Web Clipper)")
+        self.joplin_token_edit.setText(s.get("joplin_token", ""))
+        layout.addWidget(self.joplin_token_edit)
+
+        layout.addSpacing(8)
+        layout.addWidget(QLabel("📅 Google OAuth client"))
+        google_row = QHBoxLayout()
+        google_row.addWidget(QLabel("Client ID:"))
+        self.google_id_edit = QLineEdit()
+        self.google_id_edit.setPlaceholderText("...apps.googleusercontent.com")
+        self.google_id_edit.setText(s.get("google_client_id", ""))
+        google_row.addWidget(self.google_id_edit, stretch=2)
+        google_row.addWidget(QLabel("Secret:"))
+        self.google_secret_edit = QLineEdit()
+        self.google_secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.google_secret_edit.setText(s.get("google_client_secret", ""))
+        google_row.addWidget(self.google_secret_edit, stretch=1)
+        layout.addLayout(google_row)
+
+        layout.addSpacing(8)
+        layout.addWidget(QLabel("✈️ Telegram bot token"))
+        self.tg_token_edit = QLineEdit()
+        self.tg_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.tg_token_edit.setPlaceholderText("Bot token from @BotFather")
+        self.tg_token_edit.setText(s.get("telegram_token", ""))
+        layout.addWidget(self.tg_token_edit)
+
+        # --- local HTTP server ---
+        layout.addSpacing(14)
+        layout.addWidget(self._settings_rule())
+        layout.addSpacing(6)
+        layout.addWidget(self._settings_heading("Local HTTP API"))
+        layout.addWidget(self._settings_hint(
+            "A small server on this computer lets other apps read and add "
+            "your tasks. It listens on 127.0.0.1 only, so nothing is exposed "
+            "to the network."))
+
+        port_row = QHBoxLayout()
+        port_row.addWidget(QLabel("Port:"))
+        self.api_port_spin = QSpinBox()
+        self.api_port_spin.setRange(1024, 65535)
+        self.api_port_spin.setValue(int(s.get("api_port", 8765)))
+        port_row.addWidget(self.api_port_spin)
+        port_row.addWidget(QLabel("API token (optional)"))
+        self.api_token_edit = QLineEdit()
+        self.api_token_edit.setPlaceholderText("Leave empty for open local access")
+        self.api_token_edit.setText(s.get("api_token", ""))
+        port_row.addWidget(self.api_token_edit, stretch=1)
+        layout.addLayout(port_row)
+        layout.addWidget(self._settings_hint(
+            "If a token is set, clients must send: "
+            "Authorization: Bearer <token>"))
+
+        api_btns = QHBoxLayout()
+        self.api_toggle_btn = QPushButton("▶ Start")
+        self.api_toggle_btn.setToolTip("Start the local HTTP server")
+        self.api_toggle_btn.clicked.connect(self._toggle_api_server)
+        api_btns.addWidget(self.api_toggle_btn)
+        api_test = QPushButton("🧪 Test")
+        api_test.setToolTip("Call /health and show the response")
+        api_test.clicked.connect(self._test_local_api)
+        api_btns.addWidget(api_test)
+        api_copy = QPushButton("📋 Copy URL")
+        api_copy.setToolTip("Copy the API base URL")
+        api_copy.clicked.connect(self._copy_api_url)
+        api_btns.addWidget(api_copy)
+        api_btns.addStretch()
+        layout.addLayout(api_btns)
+
+        self.api_status_label = QLabel("")
+        self.api_status_label.setWordWrap(True)
+        self.api_status_label.setFont(QFont("Segoe UI", 9))
+        layout.addWidget(self.api_status_label)
+        layout.addWidget(self._settings_hint(
+            "Endpoints: GET /health · GET|POST /tasks · PUT|DELETE /tasks/<id> · "
+            "GET|POST /projects · GET|POST /sessions · GET /stats"))
+        layout.addStretch(1)
+        self._refresh_api_status()
+        return body
+
+    def _settings_updates_section(self) -> QWidget:
+        body, layout = self._settings_section()
+        layout.addWidget(self._settings_heading("Updates"))
+        layout.addWidget(self._settings_hint(
+            "Rakez checks GitHub releases and can install a new version for you."))
+
+        layout.addSpacing(8)
         upd_row = QHBoxLayout()
         self.update_btn = QPushButton("🔄 Check for updates")
         self.update_btn.setToolTip("Compare this version against the latest GitHub release")
@@ -1621,26 +1950,153 @@ class RakezMainWindow(QMainWindow):
             "background-color: #9ece6a; color: #1a1b26; font-weight: bold;")
         self.update_install_btn.clicked.connect(self._download_and_install_update)
         upd_row.addWidget(self.update_install_btn)
-        self.update_label = QLabel(f"Current version: {updater.APP_VERSION}")
-        self.update_label.setFont(QFont("Segoe UI", 8))
-        self.update_label.setStyleSheet("color: #565f89;")
-        upd_row.addWidget(self.update_label, stretch=1)
+        upd_row.addStretch()
         layout.addLayout(upd_row)
 
-        save_btn = QPushButton("💾 Save settings")
-        save_btn.setStyleSheet("background-color: #9ece6a; color: #1a1b26; font-size: 13px; padding: 10px;")
-        save_btn.clicked.connect(self._save_settings)
-        layout.addWidget(save_btn)
-        self.settings_status = QLabel("")
-        self.settings_status.setFont(QFont("Segoe UI", 8))
-        layout.addWidget(self.settings_status)
-        layout.addStretch()
-        # the settings page grew past the window height → keep it scrollable
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setWidget(tab)
-        return scroll
+        self.update_label = QLabel(tf("Current version: {v}", v=updater.APP_VERSION))
+        self.update_label.setFont(QFont("Segoe UI", 8))
+        self.update_label.setProperty("muted", True)
+        layout.addWidget(self.update_label)
+        layout.addStretch(1)
+        return body
+
+    # ---- local HTTP API ----
+
+    def _api_base_url(self) -> str:
+        try:
+            port = int(self.app_settings.get("api_port", 8765))
+        except (TypeError, ValueError):
+            port = 8765
+        return f"http://127.0.0.1:{port}"
+
+    def _refresh_api_status(self, extra: str = ""):
+        if not hasattr(self, "api_status_label"):
+            return
+        running = self._api_server is not None
+        if running:
+            text = tf("Status: running on {url}", url=self._api_base_url())
+            if extra:
+                text = f"{text} — {extra}"
+            color = "#3d8b40" if getattr(self, "theme", "dark") == "light" else "#9ece6a"
+        else:
+            text = t("Status: stopped")
+            if extra:
+                text = f"{text} — {extra}"
+            color = "#6b7280"
+        self.api_status_label.setText(text)
+        self.api_status_label.setStyleSheet(f"color: {color}; font-size: 11px;")
+        if hasattr(self, "api_toggle_btn"):
+            self.api_toggle_btn.setText(t("⏹ Stop") if running else t("▶ Start"))
+            self.api_toggle_btn.setToolTip(
+                t("Stop the local HTTP server") if running
+                else t("Start the local HTTP server"))
+
+    def _toggle_api_server(self):
+        if self._api_server is None:
+            self._start_api_server()
+        else:
+            self._stop_api_server()
+
+    def _start_api_server(self):
+        if self._api_server is not None:
+            return
+        try:
+            port = int(self.api_port_spin.value())
+        except AttributeError:
+            port = int(self.app_settings.get("api_port", 8765))
+        try:
+            token = self.api_token_edit.text().strip()
+        except AttributeError:
+            token = self.app_settings.get("api_token", "")
+        self.app_settings["api_port"] = port
+        self.app_settings["api_token"] = token
+        os.environ["API_TOKEN"] = token
+        save_settings(DATA_DIR, self.app_settings)
+        try:
+            server, thread = run_server(port=port, store=self.storage, block=False)
+        except OSError as err:
+            self._api_server = None
+            self._api_thread = None
+            self._refresh_api_status()
+            QMessageBox.warning(
+                self, t("Local HTTP API"),
+                tf("Could not start the local API server: {err}", err=err))
+            return
+        self._api_server = server
+        self._api_thread = thread
+        self._api_fingerprint = self._todos_fingerprint()
+        self._api_watch_timer.start()
+        self._refresh_api_status()
+
+    def _stop_api_server(self):
+        server = self._api_server
+        self._api_server = None
+        self._api_thread = None
+        timer = getattr(self, "_api_watch_timer", None)
+        if timer is not None:
+            timer.stop()
+        if server is not None:
+            try:
+                server.shutdown()
+            except Exception:
+                pass
+            try:
+                server.server_close()
+            except Exception:
+                pass
+        self._refresh_api_status()
+
+    def _test_local_api(self):
+        if self._api_server is None:
+            self._refresh_api_status(t("Local API is not running."))
+            return
+        request = urllib.request.Request(self._api_base_url() + "/health")
+        token = ""
+        try:
+            token = self.api_token_edit.text().strip()
+        except AttributeError:
+            token = self.app_settings.get("api_token", "")
+        if token:
+            request.add_header("Authorization", f"Bearer {token}")
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8") or "{}")
+            app_name = payload.get("app", "Rakez")
+            self._refresh_api_status(
+                tf("✓ API is healthy: {app}", app=app_name))
+        except Exception as err:
+            self._refresh_api_status(
+                tf("⚠ API test failed: {err}", err=err))
+
+    def _copy_api_url(self):
+        url = self._api_base_url()
+        QApplication.clipboard().setText(url)
+        self._refresh_api_status(tf("✓ Copied: {url}", url=url))
+
+    def _todos_fingerprint(self):
+        try:
+            return tuple(
+                (str(t.get("id", "")), t.get("title", ""),
+                 bool(t.get("completed")), str(t.get("project_id") or ""))
+                for t in self.storage.get_todos())
+        except Exception:
+            return ()
+
+    def _api_watch(self):
+        if self._api_server is None:
+            return
+        fingerprint = self._todos_fingerprint()
+        if fingerprint == self._api_fingerprint:
+            return
+        self._api_fingerprint = fingerprint
+        try:
+            self._load_todos_list()
+        except Exception:
+            pass
+        try:
+            self._refresh_task_dropdown()
+        except Exception:
+            pass
 
     def _apply_widget_size(self):
         w, h = self.set_w_spin.value(), self.set_h_spin.value()
@@ -2003,6 +2459,7 @@ class RakezMainWindow(QMainWindow):
 
     def _save_settings(self):
         s = self.app_settings
+        old_api_port = s.get("api_port", 8765)
         s["theme"] = THEMES.get(getattr(self, "theme_combo").currentText(), self.theme)
         s["widget_w"] = self.set_w_spin.value()
         s["widget_h"] = self.set_h_spin.value()
@@ -2018,6 +2475,10 @@ class RakezMainWindow(QMainWindow):
         s["opacity"] = self.opacity_spin.value()
         s["google_client_id"] = self.google_id_edit.text().strip()
         s["google_client_secret"] = self.google_secret_edit.text().strip()
+        if hasattr(self, "api_port_spin"):
+            s["api_port"] = int(self.api_port_spin.value())
+        if hasattr(self, "api_token_edit"):
+            s["api_token"] = self.api_token_edit.text().strip()
         s.update(self._telegram_settings_from_ui())
         ok = save_settings(DATA_DIR, s)
         # apply instantly — no restart, no .env
@@ -2046,6 +2507,11 @@ class RakezMainWindow(QMainWindow):
         self.opacity_spin.blockSignals(False)
         mode = t("🟢 Gemini AI") if self.coach.online else t("🟡 Offline coach")
         self.status_label.setText(f"{mode}  •  Joplin: {self.joplin.status()}")
+        os.environ["API_TOKEN"] = s.get("api_token", "")
+        self._refresh_api_status()
+        if self._api_server is not None and s.get("api_port") != old_api_port:
+            self._stop_api_server()
+            self._start_api_server()
         self.settings_status.setText(t("✓ saved to settings.json") if ok
                                      else t("⚠ save failed"))
 
@@ -2207,6 +2673,10 @@ class RakezMainWindow(QMainWindow):
         except Exception:
             pass
         try:
+            self._stop_api_server()
+        except Exception:
+            pass
+        try:
             if self.tray is not None:
                 self.tray.hide()
         except Exception:
@@ -2299,6 +2769,11 @@ class RakezMainWindow(QMainWindow):
             for t in todos:
                 if not t.get("project_id", ""):
                     add_task(t)
+
+        # local updates reload this list themselves; keep the API watcher in sync
+        # so it only refreshes for changes made through the HTTP API.
+        if getattr(self, "_api_server", None) is not None:
+            self._api_fingerprint = self._todos_fingerprint()
 
     def _add_project(self):
         name, ok = QInputDialog.getText(self, t("New Project"), t("Project name:"))

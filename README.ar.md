@@ -53,10 +53,10 @@
 
 ### 💻 CLI + Local API
 - كل شيء متاح من الطرفية (إضافة/إتمام/إحصاءات/مشاريع/مزامنة).
-- HTTP API محلي للمصادقة والتكامل مع أدوات خارجية.
+- HTTP API محلي للتكامل مع أدوات خارجية، محمي بتوكن Bearer ويُشغَّل من **Settings → 🌐 API**.
 
 ### 🌐 واجهة عربية وإنجليزية
-- بدّل اللغة من **Settings → 🌐 Language** — النافذة والودجت وكل الرسائل تتغير فورًا بدون إعادة تشغيل.
+- بدّل اللغة من **Settings → ⚙️ General** — النافذة والودجت وكل الرسائل تتغير فورًا بدون إعادة تشغيل.
 - الإنجليزية هي الافتراضية، ويمكن اختيار العربية يدويًا أو تلقائيًا حسب لغة النظام عند أول تشغيل.
 - نفس الخيار في الطرفية: `python -m cli.app --lang ar projects`.
 
@@ -150,7 +150,7 @@ joplin:
 2. فعّل **Google Calendar API** و **Google Tasks API**.
 3. **OAuth consent screen** → External → أضف بريدك في **Test users**.
 4. **Credentials → Create OAuth client ID → Desktop app** → انسخ Client ID + Secret.
-5. داخل Rakez → **Settings**: الصق القيمتين → **🔓 Authorize** → **🔌 Test connection**.
+5. داخل Rakez → **Settings → 🌐 API**: الصق القيمتين → **💾 Save settings**، ثم افتح **Integrations → 🔓 Authorize** → **🔌 Test connection**.
 
 > ⚠️ إن ظهرت رسالة **"Access blocked: Rakez has not completed verification"** فمعناها أن حسابك ليس Test user. أضفه من OAuth consent screen → Test users. البرنامج يعرض لك هذه الخطوات تلقائيًا.
 >
@@ -159,8 +159,8 @@ joplin:
 ### ربط تلجرام (تقارير + إدارة مهام من الهاتف)
 
 1. افتح [@BotFather](https://t.me/BotFather) في تلجرام → `/newbot` → انسخ **Token**.
-2. في Rakez → **Settings → ✈️ Telegram**: الصق الـ Token.
-3. أرسل `/start` للبوت من تلجرام، ثم اضغط **🔎 Detect chat ID** (أو أرسل `/id` وانسخ الرقم).
+2. في Rakez → **Settings → 🌐 API**: الصق الـ Token → **💾 Save settings**.
+3. من تلجرام أرسل `/start` للبوت، ثم من **Settings → 🔗 Integrations** اضغط **🔎 Detect chat ID** (أو أرسل `/id` وانسخ الرقم).
 4. اضغط **🔌 Test** — ستصل رسالة تجريبية — ثم **📊 Send report now**.
 5. اختياريًا: فعّل **Notify me when a task is completed** و**Daily report at 20:00**.
 
@@ -178,7 +178,7 @@ joplin:
 | 📋 Tasks | إضافة/إتمام/حذف، مشاريع ونسبة إنجاز، دفع وسحب Joplin وGoogle |
 | 🧠 Hermes | خطة صباحية / حل عذر / مراجعة يومية |
 | 📊 Analytics | إحصاءات التركيز والتصنيفات وStreak |
-| ⚙️ Settings | الثيم، حجم/شفافية/تصميم الودجت، المفاتيح، Google، تلجرام، التحديثات |
+| ⚙️ Settings | أقسام جانبية: عام، المظهر، الودجت العائم، التكاملات، **API** (كل المفاتيح + خادم HTTP المحلي)، التحديثات |
 
 اختصارات: `Enter` لإضافة مهمة، `double-click` لإتمامها.
 
@@ -205,6 +205,8 @@ python -m cli.app serve --port 8765
 ---
 
 ## 🔌 الـ HTTP API المحلي
+
+شغّله من **Settings → 🌐 API** (**المنفذ**، **توكن API** اختياري، **▶ تشغيل**، **🧪 اختبار**، **📋 نسخ الرابط**) أو من الطرفية:
 
 ```bash
 python -m cli.app serve --port 8765

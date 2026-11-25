@@ -53,10 +53,10 @@
 
 ### 💻 CLI + local API
 - Everything is available from the terminal (add/complete/stats/projects/sync).
-- A local HTTP API for integrations, protectable with a bearer token.
+- A local HTTP API for integrations, protectable with a bearer token and startable from **Settings → 🌐 API**.
 
 ### 🌐 Arabic and English UI
-- Switch language in **Settings → 🌐 Language** — the window, the widget, and every message change instantly with no restart.
+- Switch language in **Settings → ⚙️ General** — the window, the widget, and every message change instantly with no restart.
 - English is the default; Arabic can be picked manually or automatically from the system language on first run.
 - The same switch exists in the CLI: `python -m cli.app --lang ar projects`.
 
@@ -150,7 +150,7 @@ joplin:
 2. Enable **Google Calendar API** and **Google Tasks API**.
 3. **OAuth consent screen** → External → add your email under **Test users**.
 4. **Credentials → Create OAuth client ID → Desktop app** → copy the Client ID + Secret.
-5. Inside Rakez → **Settings**: paste both values → **🔓 Authorize** → **🔌 Test connection**.
+5. Inside Rakez → **Settings → 🌐 API**: paste both values → **💾 Save settings**, then open **Integrations → 🔓 Authorize** → **🔌 Test connection**.
 
 > ⚠️ If you see **"Access blocked: Rakez has not completed verification"**, your account is not a Test user. Add it under OAuth consent screen → Test users. The app shows these steps automatically.
 >
@@ -159,8 +159,8 @@ joplin:
 ### Connecting Telegram (reports + remote tasks)
 
 1. Open [@BotFather](https://t.me/BotFather) in Telegram → `/newbot` → copy the **Token**.
-2. In Rakez → **Settings → ✈️ Telegram**: paste the token.
-3. Send `/start` to your bot, then press **🔎 Detect chat ID** (or send `/id` and copy the number).
+2. In Rakez → **Settings → 🌐 API**: paste the token → **💾 Save settings**.
+3. In Telegram, send `/start` to your bot, then in **Settings → 🔗 Integrations** press **🔎 Detect chat ID** (or send `/id` and copy the number).
 4. Press **🔌 Test** — a test message arrives — then **📊 Send report now**.
 5. Optionally enable **Notify me when a task is completed** and **Daily report at 20:00**.
 
@@ -178,7 +178,7 @@ Bot commands: `/report` · `/tasks` · `/done N` · `/done id` · `/add title | 
 | 📋 Tasks | Add/complete/delete, projects and progress, push/pull Joplin and Google |
 | 🧠 Hermes | Morning plan / resolve a snag / daily review |
 | 📊 Analytics | Focus stats, categories, and streak |
-| ⚙️ Settings | Theme, widget size/opacity/design, keys, Google, Telegram, updates, language |
+| ⚙️ Settings | Sidebar sections: General, Appearance, Floating widget, Integrations, **API** (all keys + the local HTTP server), Updates |
 
 Shortcuts: `Enter` to add a task, `double-click` to complete it.
 
@@ -206,6 +206,8 @@ python -m cli.app --lang ar list               # Arabic output
 ---
 
 ## 🔌 Local HTTP API
+
+Start it from **Settings → 🌐 API** (**Port**, optional **API token**, **▶ Start**, **🧪 Test**, **📋 Copy URL**) or from the terminal:
 
 ```bash
 python -m cli.app serve --port 8765
