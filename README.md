@@ -80,7 +80,9 @@
 2. Open Rakez — your data is stored in `%APPDATA%\Rakez\data`.
 3. Future updates are one click away: **Settings → Check for updates → Download & Install**.
 
-> Note: the installer is not signed with a Code Signing certificate, so Windows SmartScreen may show “Unknown publisher”. Press **More info → Run anyway** — the publisher in the file properties is **Mostafa Elwakil**.
+> Note: the installer is Authenticode-signed by **Mostafa Elwakil** with a self-signed certificate, so Windows
+> SmartScreen can still show "Unknown publisher" on a PC that never trusted it. Press **More info → Run anyway**;
+> you can verify the signature in the file properties (Digital Signatures tab). See `packaging/SIGNING.md`.
 >
 > Linux: `bash packaging/build_linux.sh` after installing the requirements.
 
@@ -232,15 +234,20 @@ python -m cli.app serve --port 8765
 ## 🧪 Development and build
 
 ```bash
-python -m pytest tests -q          # 87 tests
+python -m pytest tests -q          # 91 tests
 
 python packaging/build_windows.py  # dist/Rakez.exe
 iscc packaging/Rakez.iss           # dist/Rakez-Setup-<version>.exe
+
+# Optional: sign both binaries with the Mostafa Elwakil certificate
+powershell -ExecutionPolicy Bypass -File packaging\sign_windows.ps1 -Path dist\Rakez.exe,dist\Rakez-Setup-*.exe
 ```
 
 - The current version lives in: `core/updater.py` (`APP_VERSION`), `packaging/Rakez.iss`, `packaging/version_info.txt`.
-- **GitHub Actions** builds and tests the installer on every new **tag** (`v*`) and publishes it to Releases.
+- **GitHub Actions** builds and tests the installer on every new **tag** (`v*`), signs it when the
+  `SIGNING_PFX_BASE64` / `SIGNING_PFX_PASSWORD` secrets exist, and publishes it to Releases.
 - The marketing site is published automatically from `website/` via GitHub Pages.
+- Code signing details: `packaging/SIGNING.md`.
 
 ### Project layout
 

@@ -80,7 +80,7 @@
 2. افتح Rakez — بياناتك تُحفظ في `%APPDATA%\Rakez\data`.
 3. التحديثات القادمة بضغطة واحدة من: **Settings → Check for updates → Download & Install**.
 
-> ملاحظة: الملف غير موقّع بشهادة Code Signing، فقد تظهر رسالة SmartScreen "Unknown publisher". اضغط **More info → Run anyway** — الناشر داخل خصائص الملف هو **Mostafa Elwakil**.
+> ملاحظة: المثبّت موقّع بتوقيع Authenticode باسم **Mostafa Elwakil** بشهادة ذاتية التوقيع، لذا قد يعرض SmartScreen رسالة "Unknown publisher" على جهاز لم يثق بالشهادة. اضغط **More info → Run anyway**، ويمكنك التحقق من التوقيع من خصائص الملف (التبويب **Digital Signatures**). التفاصيل في `packaging/SIGNING.md`.
 >
 > Linux: `bash packaging/build_linux.sh` بعد تثبيت المتطلبات.
 
@@ -231,15 +231,20 @@ python -m cli.app serve --port 8765
 ## 🧪 التطوير والبناء
 
 ```bash
-python -m pytest tests -q          # 87 اختبارًا
+python -m pytest tests -q          # 91 اختبارًا
 
 python packaging/build_windows.py  # dist/Rakez.exe
 iscc packaging/Rakez.iss           # dist/Rakez-Setup-<version>.exe
+
+# اختياري: توقيع الملفين بشهادة Mostafa Elwakil
+powershell -ExecutionPolicy Bypass -File packaging\sign_windows.ps1 -Path dist\Rakez.exe,dist\Rakez-Setup-*.exe
 ```
 
 - الإصدار الحالي يُحدَّد في: `core/updater.py` (`APP_VERSION`)، `packaging/Rakez.iss`، `packaging/version_info.txt`.
-- **GitHub Actions** يبني ويختبر المثبّت على كل **tag** جديد (`v*`) وينشره تلقائيًا في Releases.
+- **GitHub Actions** يبني ويختبر المثبّت على كل **tag** جديد (`v*`)، ويوقّعه عند وجود الأسرار
+  `SIGNING_PFX_BASE64` و`SIGNING_PFX_PASSWORD`، ثم ينشره في Releases.
 - صفحات الموقع تُنشر تلقائيًا من `website/` عبر GitHub Pages.
+- تفاصيل التوقيع: `packaging/SIGNING.md`.
 
 ### هيكل المشروع
 

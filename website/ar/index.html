@@ -370,13 +370,15 @@
             <div><dt>الإصدار</dt><dd data-version>—</dd></div>
             <div><dt>الحجم</dt><dd data-size>—</dd></div>
             <div><dt>تاريخ النشر</dt><dd data-date>—</dd></div>
+            <div><dt>الناشر</dt><dd>Mostafa Elwakil</dd></div>
             <div><dt>الترخيص</dt><dd>مجاني للاستخدام الشخصي</dd></div>
           </dl>
 
           <p class="fineprint">
-            الملف غير موقّع بشهادة Code Signing، فقد تظهر رسالة SmartScreen «Unknown publisher».
-            اضغط <strong>More info → Run anyway</strong>؛ الناشر داخل خصائص الملف هو
-            <strong>Mostafa Elwakil</strong>.
+            المثبّت موقّع بتوقيع Authenticode باسم <strong>Mostafa Elwakil</strong> بشهادة ذاتية التوقيع،
+            لذا قد يظهر تحذير SmartScreen على جهاز لم يثق بالشهادة — اضغط
+            <strong>More info → Run anyway</strong>، أو تحقّق من التوقيع من تبويب
+            <em>Digital Signatures</em> في خصائص الملف.
           </p>
         </div>
 
@@ -414,7 +416,7 @@
         </details>
         <details>
           <summary>لماذا يظهر «Unknown publisher» عند التثبيت؟</summary>
-          <p>لأن المثبّت غير موقّع رقميًا بشهادة Code Signing مدفوعة. هذا لا يعني وجود خطر؛ بيانات الناشر داخل الملف هي <strong>Mostafa Elwakil</strong>. اختر <em>More info → Run anyway</em>.</p>
+          <p>لأن المثبّت موقّع باسم <strong>Mostafa Elwakil</strong> بشهادة ذاتية التوقيع لا يثق بها SmartScreen افتراضيًا. تحقّق من تبويب <em>Digital Signatures</em> في خصائص الملف ثم اختر <em>More info → Run anyway</em>. إزالة التحذير للجميع تتطلب شهادة OV/EV مدفوعة.</p>
         </details>
         <details>
           <summary>هل يعمل بدون إنترنت؟</summary>

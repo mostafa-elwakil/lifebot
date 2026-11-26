@@ -15,8 +15,26 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      # Optional code signing. Add repository secrets
+      #   SIGNING_PFX_BASE64    - base64 of packaging/rakez-codesign.pfx
+      #   SIGNING_PFX_PASSWORD  - its password
+      # (see packaging/SIGNING.md). Without them the build stays unsigned.
+      SIGNING_PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+      SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Import code-signing certificate
+        if: env.SIGNING_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "rakez-codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
+          $pwd = ConvertTo-SecureString -String $env:SIGNING_PFX_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pwd | Out-Null
+          Remove-Item $pfx -Force
+          Write-Host "Code-signing certificate imported."
 
       - uses: actions/setup-python@v5
         with:
@@ -35,6 +53,11 @@ jobs:
       - name: Build Rakez.exe (PyInstaller)
         run: python packaging/build_windows.py
 
+      - name: Sign Rakez.exe
+        if: env.SIGNING_PFX_BASE64 != ''
+        shell: pwsh
+        run: .\packaging\sign_windows.ps1 -Path dist\Rakez.exe
+
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
@@ -43,12 +66,35 @@ jobs:
           & $iscc packaging\Rakez.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
 
+      - name: Sign installer
+        if: env.SIGNING_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\Rakez-Setup-*.exe | Select-Object -First 1
+          if (-not $setup) { throw "Installer not found" }
+          .\packaging\sign_windows.ps1 -Path $setup.FullName
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: Rakez-Setup
           path: dist/Rakez-Setup-*.exe
           retention-days: 30
+
+      - name: Drop assets from a previous run of this tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $names = gh release view $tag --json assets --jq ".assets[].name" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            foreach ($name in $names) {
+              Write-Host "Removing existing asset $name"
+              gh release delete-asset $tag $name --yes
+            }
+          }
 
       - name: Publish GitHub Release (on tag)
         if: startsWith(github.ref, 'refs/tags/v')

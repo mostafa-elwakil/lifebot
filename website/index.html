@@ -371,13 +371,15 @@
             <div><dt>Version</dt><dd data-version>—</dd></div>
             <div><dt>Size</dt><dd data-size>—</dd></div>
             <div><dt>Released</dt><dd data-date>—</dd></div>
+            <div><dt>Publisher</dt><dd>Mostafa Elwakil</dd></div>
             <div><dt>License</dt><dd>Free for personal use</dd></div>
           </dl>
 
           <p class="fineprint">
-            The installer is not signed with a Code Signing certificate, so Windows SmartScreen may show
-            “Unknown publisher”. Press <strong>More info → Run anyway</strong>; the publisher in the file
-            properties is <strong>Mostafa Elwakil</strong>.
+            The installer is Authenticode-signed by <strong>Mostafa Elwakil</strong> with a self-signed
+            certificate. Windows SmartScreen can still warn on PCs that never trusted it — press
+            <strong>More info → Run anyway</strong>, or verify the signature under the file's
+            <em>Digital Signatures</em> tab.
           </p>
         </div>
 
@@ -415,7 +417,7 @@
         </details>
         <details>
           <summary>Why does “Unknown publisher” appear when installing?</summary>
-          <p>Because the installer is not digitally signed with a paid Code Signing certificate. That does not mean it is unsafe; the publisher inside the file is <strong>Mostafa Elwakil</strong>. Choose <em>More info → Run anyway</em>.</p>
+          <p>Because the installer is signed by <strong>Mostafa Elwakil</strong> with a self-signed certificate, which SmartScreen does not trust by default. Check the <em>Digital Signatures</em> tab in the file properties, then choose <em>More info → Run anyway</em>. Removing the warning for everyone requires a paid OV/EV certificate.</p>
         </details>
         <details>
           <summary>Does it work offline?</summary>
