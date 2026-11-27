@@ -13,7 +13,8 @@ Rakez binaries are Authenticode-signed as **Mostafa Elwakil**.
 
 The certificate material lives **outside the repository** in `%USERPROFILE%\.rakez\signing\`
 (`rakez-codesign.pfx`, `rakez-codesign.cer`, `pfx-password.txt`) and is never committed —
-`*.pfx`, `*.p12`, `*.cer`, and `signing/` are in `.gitignore`.
+`*.pfx`, `*.p12`, `*.cer`, and `signing/` are in `.gitignore`. The public certificate is also
+attached to every GitHub release as **`rakez-codesign.cer`** so users can trust it.
 
 ## Honest limitation
 
