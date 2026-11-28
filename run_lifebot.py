@@ -1014,6 +1014,9 @@ class FloatingTimerWidget(QWidget):
 
 
 class RakezMainWindow(QMainWindow):
+    # background pull of remote completions → GUI refresh on the main thread
+    remote_sync_finished = pyqtSignal(dict)
+
     def __init__(self, storage: SqliteStorage):
         super().__init__()
         self.storage = storage
@@ -1053,6 +1056,8 @@ class RakezMainWindow(QMainWindow):
             project_lookup=lambda pid: (self.storage.get_project(pid) or {}).get("name", ""),
             joplin_folder=self.joplin_folder, joplin_tags=self.joplin_tags)
         self.sync_hub.attach()
+        self._remote_sync_thread = None
+        self.remote_sync_finished.connect(self._after_remote_pull)
         self._telegram_poller = None
         self._telegram_last_daily = ""
         # settings sidebar remembers the section across language switches
@@ -1086,6 +1091,13 @@ class RakezMainWindow(QMainWindow):
         self._api_watch_timer = QTimer(self)
         self._api_watch_timer.setInterval(5000)
         self._api_watch_timer.timeout.connect(self._api_watch)
+        # two-way sync: every two minutes pull completions made in Google
+        # Tasks / Joplin / Notion back into Rakez (then fan out to the rest)
+        self._remote_pull_timer = QTimer(self)
+        self._remote_pull_timer.setInterval(120_000)
+        self._remote_pull_timer.timeout.connect(self._pull_remote_completions)
+        self._remote_pull_timer.start()
+        QTimer.singleShot(8000, self._pull_remote_completions)
         # apply saved widget look
         self.floating_widget.background = self.app_settings.get("background", "#1a1b26")
         self.floating_widget.accent = self.app_settings.get("accent", "#7aa2f7")
@@ -1753,10 +1765,10 @@ class RakezMainWindow(QMainWindow):
         layout.addLayout(keys_row)
 
         self.auto_sync_check = QCheckBox(
-            "Sync tasks automatically (Google Tasks, Joplin, Notion)")
+            "Two-way sync with Google Tasks, Joplin and Notion")
         self.auto_sync_check.setToolTip(
-            "When a task is added, edited, completed or deleted, update every "
-            "connected service in the background")
+            "Push every task change to the connected services and pull back "
+            "tasks completed there (checked every 2 minutes)")
         self.auto_sync_check.setChecked(bool(s.get("auto_sync", True)))
         layout.addWidget(self.auto_sync_check)
 
@@ -1820,7 +1832,9 @@ class RakezMainWindow(QMainWindow):
         notion_test.clicked.connect(self._test_notion)
         notion_btns.addWidget(notion_test)
         notion_sync = QPushButton("🔄 Sync now")
-        notion_sync.setToolTip("Push every task to Notion, Joplin and Google Tasks")
+        notion_sync.setToolTip(
+            "Pull tasks completed in Google Tasks, Joplin or Notion, then push "
+            "every task to all of them")
         notion_sync.clicked.connect(self._sync_all_integrations)
         notion_btns.addWidget(notion_sync)
         notion_btns.addStretch()
@@ -2676,6 +2690,35 @@ class RakezMainWindow(QMainWindow):
                                 tf("Connection failed:\n\n{msg}",
                                    msg=res.get("message", "")))
 
+    def _pull_remote_completions(self):
+        """Pull completions made in Google Tasks / Joplin / Notion (background)."""
+        if not self.app_settings.get("auto_sync", True):
+            return
+        if (self._remote_sync_thread is not None
+                and self._remote_sync_thread.is_alive()):
+            return
+
+        def worker():
+            try:
+                res = self.sync_hub.pull()
+            except Exception as e:
+                res = {"completed": 0, "errors": [str(e)[:160]]}
+            self.remote_sync_finished.emit(res)
+
+        self._remote_sync_thread = threading.Thread(target=worker, daemon=True)
+        self._remote_sync_thread.start()
+
+    def _after_remote_pull(self, res: dict):
+        """Refresh the UI after a background pull (main thread)."""
+        n = int((res or {}).get("completed") or 0)
+        if not n:
+            return
+        self._load_todos_list()
+        self._refresh_task_dropdown()
+        if hasattr(self, "notion_status_label"):
+            self.notion_status_label.setText(
+                tf("✓ {n} task(s) completed from other services", n=n))
+
     def _sync_all_integrations(self):
         """Push every task to all configured services (manual full sync)."""
         self._apply_notion_from_ui()
@@ -2686,6 +2729,10 @@ class RakezMainWindow(QMainWindow):
         except Exception as e:
             res = {"errors": [str(e)[:160]]}
         parts = []
+        pulled = int(res.get("pulled") or 0)
+        if pulled:
+            parts.append(tf("✓ {n} task(s) completed from other services",
+                            n=pulled))
         j = res.get("joplin") or {}
         if j:
             parts.append(tf("Joplin: {c} added, {u} updated, {d} completed",

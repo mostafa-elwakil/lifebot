@@ -281,12 +281,15 @@ def notion_test():
 
 @app.command()
 def sync():
-    """Push every task to every configured service (Joplin, Google Tasks, Notion)."""
+    """Two-way sync: pull remote completions, then push every task everywhere."""
     _store()
     if _hub is None:
         console.print(f"[yellow]{tr('No integrations configured yet.')}[/yellow]")
         return
     res = _hub.sync_all()
+    pulled = int(res.get("pulled") or 0)
+    if pulled:
+        console.print(f"[green]{tr('✓ {n} task(s) completed from other services').format(n=pulled)}[/green]")
     j = res.get("joplin") or {}
     if j:
         console.print(tr("Joplin: {c} added, {u} updated, {d} completed").format(
@@ -300,6 +303,7 @@ def sync():
             c=n.get("created", 0), u=n.get("updated", 0)))
     for err in res.get("errors") or []:
         console.print(f"[yellow]{err}[/yellow]")
+    _flush_sync()
 
 
 @app.command()

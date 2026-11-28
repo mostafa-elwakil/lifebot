@@ -1,9 +1,11 @@
-"""Fan-out task sync: Rakez → Google Tasks / Joplin / Notion.
+"""Two-way task sync: Rakez ⇄ Google Tasks / Joplin / Notion.
 
 The storage layer emits ``created`` / ``updated`` / ``completed`` /
 ``reopened`` / ``deleted`` events; this hub forwards them to every configured
 integration on a background worker so the UI and the local HTTP API never
-block on the network.
+block on the network. :meth:`IntegrationHub.pull` reads the remote state back
+so a task ticked in Google Tasks, Joplin or Notion is completed in Rakez too
+(and then fans out to the remaining services).
 
 Rules:
   * A task is pushed to Google Tasks only after Google is authorized.
@@ -15,8 +17,40 @@ Rules:
 """
 from __future__ import annotations
 import queue
+import re
 import threading
 import time
+from datetime import datetime, timedelta
+
+
+def _norm_title(title) -> str:
+    """Loose title key for matching a remote item with a local task."""
+    return re.sub(r"\s+", " ", str(title or "").strip()).casefold()
+
+
+def _recent(when, days: int = 14) -> bool:
+    """True when a remote timestamp falls inside the recency window.
+
+    Used to keep a title-only match from completing a brand-new local task
+    just because an old remote item happens to share its title.
+    """
+    text = str(when or "").strip()
+    if not text:
+        return False
+    if text.isdigit():
+        try:
+            return time.time() - float(text) / 1000.0 <= days * 86400
+        except ValueError:
+            return False
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if parsed.tzinfo is not None:
+        now = datetime.now(parsed.tzinfo)
+    else:
+        now = datetime.now()
+    return now - parsed <= timedelta(days=days)
 
 
 class IntegrationHub:
@@ -36,6 +70,7 @@ class IntegrationHub:
         self._queue = None
         self._worker = None
         self._start_lock = threading.Lock()
+        self._pull_lock = threading.Lock()
         self.last_errors: list[str] = []
 
     # --- wiring ---
@@ -362,10 +397,116 @@ class IntegrationHub:
             self._error("Notion", c.friendly_error())
             out["errors"].append("notion")
 
+    # --- pull: remote completions → local ---
+    def pull(self) -> dict:
+        """Mark local tasks done when Google/Joplin/Notion says they are done.
+
+        Runs at most once at a time. The resulting storage event still fans the
+        completion out to the other services, so every integration converges.
+        Never raises.
+        """
+        out = {"completed": 0, "google": 0, "joplin": 0, "notion": 0,
+               "errors": []}
+        if not self._pull_lock.acquire(blocking=False):
+            return out
+        try:
+            todos = self.storage.get_todos()
+            by_id = {t["id"]: t for t in todos}
+            by_title: dict[str, dict] = {}
+            for t in todos:
+                if not t.get("completed"):
+                    by_title.setdefault(_norm_title(t.get("title")), t)
+
+            def apply(service: str, field: str, remote_id: str, title: str,
+                      local_id: str = "", when: str = "") -> int:
+                todo = by_id.get(local_id) if local_id else None
+                if todo is None and remote_id:
+                    todo = next((t for t in todos
+                                 if (t.get(field) or "") == remote_id), None)
+                if todo is None and title and (not when or _recent(when)):
+                    candidate = by_title.get(_norm_title(title))
+                    # never steal a title match that already belongs to a
+                    # different remote item
+                    if candidate is not None and remote_id:
+                        current = (candidate.get(field) or "").strip()
+                        if current and current != remote_id:
+                            candidate = None
+                    todo = candidate
+                if todo is None or todo.get("completed"):
+                    return 0
+                if remote_id and (todo.get(field) or "") != remote_id:
+                    self.storage.set_sync_ids(todo["id"], **{field: remote_id})
+                    todo[field] = remote_id
+                ok = self.storage.set_completed(todo["id"], True)
+                if not ok:
+                    return 0
+                todo["completed"] = True
+                by_title.pop(_norm_title(todo.get("title")), None)
+                return 1
+
+            # --- Google Tasks ---
+            g = self.google
+            if (g is not None and getattr(g, "authorized", False)
+                    and hasattr(g, "fetch_tasks")):
+                try:
+                    for item in g.fetch_tasks(include_completed=True):
+                        if item.get("completed"):
+                            out["google"] += apply(
+                                "google", "google_id", item.get("id", ""),
+                                item.get("title", ""),
+                                when=item.get("completed_at") or item.get("updated", ""))
+                except Exception as e:
+                    out["errors"].append(f"Google pull: {str(e)[:120]}")
+
+            # --- Joplin ---
+            j = self.joplin
+            if (j is not None and getattr(j, "available", False)
+                    and hasattr(j, "pull_todos")):
+                try:
+                    for item in j.pull_todos(folder_name=self.joplin_folder):
+                        if item.get("completed"):
+                            out["joplin"] += apply(
+                                "joplin", "joplin_id", item.get("joplin_id", ""),
+                                item.get("title", ""),
+                                when=item.get("updated", ""))
+                except Exception as e:
+                    out["errors"].append(f"Joplin pull: {str(e)[:120]}")
+
+            # --- Notion ---
+            n = self.notion
+            if (n is not None and getattr(n, "available", False)
+                    and hasattr(n, "fetch_tasks")):
+                try:
+                    for item in n.fetch_tasks():
+                        if item.get("completed"):
+                            out["notion"] += apply(
+                                "notion", "notion_id", item.get("notion_id", ""),
+                                item.get("title", ""), item.get("rakez_id", ""),
+                                when=item.get("updated", ""))
+                except Exception as e:
+                    out["errors"].append(f"Notion pull: {str(e)[:120]}")
+
+            out["completed"] = out["google"] + out["joplin"] + out["notion"]
+        except Exception as e:  # pragma: no cover - defensive
+            out["errors"].append(str(e)[:160])
+        finally:
+            self._pull_lock.release()
+        return out
+
     # --- manual full sync ---
-    def sync_all(self) -> dict:
-        """Push every task to every configured service (Sync now button)."""
-        out = {"joplin": {}, "google": {}, "notion": {}, "errors": []}
+    def sync_all(self, pull: bool = True) -> dict:
+        """Push every task to every configured service (Sync now button).
+
+        With ``pull=True`` (default) completions made in Google Tasks, Joplin
+        or Notion are applied locally first, then the resulting state is
+        pushed everywhere.
+        """
+        out = {"joplin": {}, "google": {}, "notion": {}, "pulled": 0,
+               "errors": []}
+        if pull:
+            pulled = self.pull()
+            out["pulled"] = pulled.get("completed", 0)
+            out["errors"].extend(pulled.get("errors") or [])
         todos = self.storage.get_todos()
         names = {}
         for t in todos:

@@ -458,6 +458,7 @@ class JoplinClient:
                     "priority": pri,
                     "completed": bool(n.get("todo_completed")),
                     "joplin_id": n.get("id"),
+                    "updated": n.get("updated_time", ""),
                 })
             return [t for t in out if t["title"]]
         except Exception as e:

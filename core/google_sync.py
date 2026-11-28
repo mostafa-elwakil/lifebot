@@ -279,6 +279,40 @@ class GoogleSync:
             self._set_error(e)
         return ""
 
+    def fetch_tasks(self, include_completed: bool = True,
+                    max_n: int = 100) -> list[dict]:
+        """Raw task states (id/title/completed/updated). Never raises.
+
+        Used by the sync hub to pull completions made in Google Tasks back
+        into Rakez.
+        """
+        try:
+            svc = self._tasks_service()
+            if not svc:
+                return []
+            items = svc.tasks().list(
+                tasklist=self._default_list(),
+                showCompleted=include_completed,
+                showHidden=include_completed,
+                maxResults=max_n,
+            ).execute().get("items", [])
+            out = []
+            for t in items:
+                title = (t.get("title") or "").strip()
+                if not title:
+                    continue
+                out.append({
+                    "id": t.get("id", ""),
+                    "title": title,
+                    "completed": t.get("status") == "completed",
+                    "completed_at": t.get("completed", ""),
+                    "updated": t.get("updated", ""),
+                })
+            return out
+        except Exception as e:
+            self._set_error(e)
+            return []
+
     def pull_tasks(self, max_n: int = 50) -> list[dict]:
         """Fetch open Google Tasks as Lifebot-style dicts. Never raises."""
         try:

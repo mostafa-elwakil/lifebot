@@ -681,12 +681,12 @@ AR = {
     "🗂️ Notion integration token": "🗂️ رمز تكامل Notion",
     "Internal Integration Secret (notion.so/my-integrations)":
         "Internal Integration Secret من notion.so/my-integrations",
-    "Sync tasks automatically (Google Tasks, Joplin, Notion)":
-        "مزامنة المهام تلقائيًا (Google Tasks وJoplin وNotion)",
-    "When a task is added, edited, completed or deleted, update every "
-    "connected service in the background":
-        "عند إضافة مهمة أو تعديلها أو إتمامها أو حذفها، حدّث كل خدمة "
-        "متصلة في الخلفية",
+    "Two-way sync with Google Tasks, Joplin and Notion":
+        "مزامنة ثنائية الاتجاه مع Google Tasks وJoplin وNotion",
+    "Push every task change to the connected services and pull back "
+    "tasks completed there (checked every 2 minutes)":
+        "أرسل كل تغيير في المهام إلى الخدمات المتصلة، واسحب المهام "
+        "المكتملة منها (يُفحص كل دقيقتين)",
     "🗂️ Notion": "🗂️ Notion",
     "Paste the integration token under API, share the database with "
     "your integration in Notion (⋯ → Connections), then paste its ID "
@@ -698,8 +698,10 @@ AR = {
     "32-character ID from the database URL":
         "معرّف من 32 حرفًا من رابط قاعدة البيانات",
     "🔄 Sync now": "🔄 مزامنة الآن",
-    "Push every task to Notion, Joplin and Google Tasks":
-        "أرسل كل المهام إلى Notion وJoplin وGoogle Tasks",
+    "Pull tasks completed in Google Tasks, Joplin or Notion, then push "
+    "every task to all of them":
+        "اسحب المهام المكتملة من Google Tasks وJoplin وNotion، ثم أرسل "
+        "كل المهام إليها جميعًا",
     "⏳ testing Notion...": "⏳ اختبار Notion...",
     "Notion Test": "اختبار Notion",
     "⚠ Notion: {err}": "⚠ Notion: {err}",
@@ -713,6 +715,8 @@ AR = {
     "Sync": "مزامنة",
     "✓ tasks synced to Notion": "✓ تمت مزامنة المهام مع Notion",
     "✓ sync finished": "✓ انتهت المزامنة",
+    "✓ {n} task(s) completed from other services":
+        "✓ اكتملت {n} مهمة من الخدمات الأخرى",
     "⚠ {err}": "⚠ {err}",
     "Save the OAuth client ID and secret under API first, "
     "then authorize once here. New tasks are pushed to Google Tasks "

@@ -35,14 +35,15 @@
 - A morning plan, help resolving excuses, and a daily review.
 - Works with **Gemini** when you add a key; without one it offers a genuinely useful **Offline** mode.
 
-### 🔄 Automatic sync with Joplin, Google Tasks and Notion
+### 🔄 Two-way sync with Joplin, Google Tasks and Notion
 - **One action, every service**: adding, editing, completing, reopening or deleting a task updates every connected service in the background — from the GUI, the floating widget, the CLI or the local API.
+- **The reverse works too**: complete a task in Google Tasks, Joplin or Notion and Rakez marks it done locally, then tells the remaining services (checked every 2 minutes, plus at startup and on **Sync now**).
 - **Joplin**: your tasks show up instantly in `Projects/Lifebot/Tasks` with tags and a due date, and you can pull Joplin to-dos into the app (Pull button + automatically on startup). The `dedupe` command cleans up duplicates.
-- **Google Tasks**: every task is pushed automatically (no duplicate copies), and completions/deletions follow through.
-- **Notion**: a database of your choice receives the tasks with `Done`, `Category`, `Priority`, `Project` and `Completed at` properties; Rakez creates the properties it needs on the first sync.
+- **Google Tasks**: every task is pushed automatically (no duplicate copies), and completions/reopens/deletions follow through in both directions.
+- **Notion**: a database of your choice receives the tasks with `Done`, `Category`, `Priority`, `Project` and `Completed at` properties; Rakez creates the properties it needs on the first sync. Ticking `Done` in Notion completes the task in Rakez.
 - **Google Calendar**: finished focus sessions are logged as events automatically.
-- **Sync now** backfills everything in one click, and **Test connection** really checks your permissions with friendly, actionable errors.
-- Prefer manual control? Turn off **Sync tasks automatically** in **Settings → Integrations**.
+- **Sync now** pulls remote completions and backfills everything in one click, and **Test connection** really checks your permissions with friendly, actionable errors.
+- Prefer manual control? Turn off **Two-way sync** in **Settings → Integrations**.
 
 ### 📊 Analytics and progress
 - Focus minutes over the last 7 days, minutes per category, streak, and completed tasks.
@@ -117,7 +118,7 @@ python -m cli.app add "Design the landing page" --project Website --priority hig
 python -m cli.app projects
 python -m cli.app stats --days 7
 python -m cli.app google-test          # check the Google connection
-python -m pytest tests -q              # 115 tests
+python -m pytest tests -q              # 122 tests
 ```
 
 ---
@@ -214,7 +215,7 @@ python -m cli.app plan | python -m cli.app review
 python -m cli.app dedupe [--apply]
 python -m cli.app google-test [--authorize]
 python -m cli.app notion-test                  # check the Notion token + database
-python -m cli.app sync                         # push tasks to every integration
+python -m cli.app sync                         # pull remote completions, then push everywhere
 python -m cli.app telegram-test                # token check + test message
 python -m cli.app telegram-chat-id             # detect the chat ID
 python -m cli.app telegram-report [--no-send]  # report (and send it)

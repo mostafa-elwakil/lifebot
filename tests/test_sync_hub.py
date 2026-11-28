@@ -1,6 +1,6 @@
 """IntegrationHub: storage events fan out to Google Tasks, Joplin, Notion."""
 from core.storage import SqliteStorage
-from core.sync import IntegrationHub
+from core.sync import IntegrationHub, _recent
 
 
 class FakeJoplin:
@@ -9,9 +9,13 @@ class FakeJoplin:
     def __init__(self):
         self.created, self.updated, self.completed = [], [], []
         self.deleted, self.last_error = [], ""
+        self.remote = []
 
     def find_todo_id(self, title, folder_name=""):
         return ""
+
+    def pull_todos(self, folder_name=""):
+        return list(self.remote)
 
     def create_todo(self, title, body="", folder_name="", tags=""):
         self.created.append(title)
@@ -39,9 +43,13 @@ class FakeGoogle:
     def __init__(self):
         self.pushed, self.updated, self.status, self.deleted = [], [], [], []
         self.last_error = ""
+        self.remote = []
 
     def find_task_id(self, title):
         return ""
+
+    def fetch_tasks(self, include_completed=True, max_n=100):
+        return list(self.remote)
 
     def push_task(self, title, notes="", completed=False):
         self.pushed.append((title, completed))
@@ -66,6 +74,10 @@ class FakeNotion:
     def __init__(self):
         self.upserts, self.done, self.archived = [], [], []
         self.last_error = ""
+        self.remote = []
+
+    def fetch_tasks(self):
+        return list(self.remote)
 
     def upsert_task(self, todo, project_name=""):
         self.upserts.append((todo["id"], project_name))
@@ -178,4 +190,117 @@ def test_sync_all_reports_each_service(tmp_path):
     assert res["google"]["pushed"] >= 1
     assert res["notion"]["created"] >= 1
     assert res["errors"] == []
+    store.close()
+
+
+# --- two-way sync: remote completion → local → every other service ---
+
+def test_recent_accepts_iso_and_epoch_and_rejects_old():
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    assert _recent(now.isoformat())
+    assert _recent(int(now.timestamp() * 1000))
+    assert not _recent("2020-01-01T00:00:00Z")
+    assert not _recent("")
+    assert not _recent("not-a-date")
+
+
+def test_pull_completes_task_done_in_google(tmp_path):
+    store, hub, joplin, google, notion, notified = _hub(tmp_path)
+    todo = store.add_todo("Pay the invoice")
+    hub.flush(5)
+    google.remote = [{"id": "google-1", "title": "Pay the invoice",
+                      "completed": True, "completed_at": "", "updated": ""}]
+
+    res = hub.pull()
+    assert res["completed"] == 1
+    assert res["google"] == 1
+
+    row = store.get_todo(todo["id"])
+    assert row["completed"] is True
+
+    hub.flush(5)
+    assert joplin.completed == [("joplin-1", True)]
+    assert google.status == [("google-1", True)]
+    assert notion.done == [(f"notion-{todo['id']}", True)]
+    assert notified == ["Pay the invoice"]
+    store.close()
+
+
+def test_pull_matches_title_when_task_has_no_external_id(tmp_path):
+    store = SqliteStorage(data_dir=tmp_path)
+    todo = store.add_todo("Old local task")  # added before the hub attached
+    google, joplin, notion = FakeGoogle(), FakeJoplin(), FakeNotion()
+    hub = IntegrationHub(store, joplin=joplin, google=google, notion=notion,
+                         enabled=lambda: True, project_lookup=lambda pid: "")
+    hub.attach()
+    google.remote = [{"id": "google-9", "title": "  old   LOCAL task ",
+                      "completed": True, "completed_at": "",
+                      "updated": "2026-11-28T10:00:00Z"}]
+
+    res = hub.pull()
+    assert res["google"] == 1
+    row = store.get_todo(todo["id"])
+    assert row["completed"] is True
+    assert row["google_id"] == "google-9"
+    store.close()
+
+
+def test_pull_ignores_stale_title_match(tmp_path):
+    store = SqliteStorage(data_dir=tmp_path)
+    todo = store.add_todo("Recurring review")
+    google = FakeGoogle()
+    hub = IntegrationHub(store, google=google, enabled=lambda: True)
+    hub.attach()
+    google.remote = [{"id": "google-old", "title": "Recurring review",
+                      "completed": True, "completed_at": "",
+                      "updated": "2020-01-01T00:00:00Z"}]
+
+    assert hub.pull()["google"] == 0
+    assert store.get_todo(todo["id"])["completed"] is False
+    store.close()
+
+
+def test_pull_uses_rakez_id_for_notion(tmp_path):
+    store = SqliteStorage(data_dir=tmp_path)
+    todo = store.add_todo("Draft the proposal")
+    notion = FakeNotion()
+    hub = IntegrationHub(store, notion=notion, enabled=lambda: True)
+    hub.attach()
+    notion.remote = [{"notion_id": "page-1", "rakez_id": todo["id"],
+                      "title": "Something renamed", "completed": True,
+                      "updated": ""}]
+
+    assert hub.pull()["notion"] == 1
+    assert store.get_todo(todo["id"])["completed"] is True
+    store.close()
+
+
+def test_pull_from_joplin_completes_local_task(tmp_path):
+    store = SqliteStorage(data_dir=tmp_path)
+    todo = store.add_todo("Water the plants")
+    joplin = FakeJoplin()
+    hub = IntegrationHub(store, joplin=joplin, enabled=lambda: True,
+                         joplin_folder="Tasks")
+    hub.attach()
+    joplin.remote = [{"joplin_id": "note-1", "title": "Water the plants",
+                      "completed": True, "updated": ""}]
+
+    assert hub.pull()["joplin"] == 1
+    row = store.get_todo(todo["id"])
+    assert row["completed"] is True
+    assert row["joplin_id"] == "note-1"
+    store.close()
+
+
+def test_sync_all_reports_pulled_completions(tmp_path):
+    store, hub, joplin, google, notion, _ = _hub(tmp_path)
+    todo = store.add_todo("Close the sprint")
+    hub.flush(5)
+    google.remote = [{"id": "google-1", "title": "Close the sprint",
+                      "completed": True, "completed_at": "", "updated": ""}]
+
+    res = hub.sync_all()
+    assert res["pulled"] == 1
+    assert store.get_todo(todo["id"])["completed"] is True
     store.close()

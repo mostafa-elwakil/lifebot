@@ -222,6 +222,56 @@ class NotionClient:
         res = self._request("PATCH", f"/pages/{page_id}", {"archived": True})
         return isinstance(res, dict) and bool(res.get("id"))
 
+    # --- pull (completion states) ---
+    @staticmethod
+    def _page_text(page: dict, prop_name: str) -> str:
+        prop = (page.get("properties") or {}).get(prop_name) or {}
+        ptype = prop.get("type")
+        if ptype == "title":
+            parts = prop.get("title") or []
+        elif ptype == "rich_text":
+            parts = prop.get("rich_text") or []
+        else:
+            return ""
+        return "".join(p.get("plain_text", "") for p in parts).strip()
+
+    def fetch_tasks(self, max_pages: int = 5) -> list[dict]:
+        """Read pages from the database (id, Rakez ID, title, Done).
+
+        Used by the sync hub to pull ticks made in Notion back into Rakez.
+        Never raises.
+        """
+        out: list[dict] = []
+        if not self.available:
+            return out
+        if not self.ensure_schema():
+            return out
+        cursor = None
+        for _ in range(max_pages):
+            payload: dict = {"page_size": 100}
+            if cursor:
+                payload["start_cursor"] = cursor
+            res = self._request("POST", f"/databases/{self.database_id}/query", payload)
+            if not isinstance(res, dict):
+                break
+            for page in res.get("results") or []:
+                done_prop = (page.get("properties") or {}).get(PROP_DONE) or {}
+                completed = bool(done_prop.get("checkbox")) \
+                    if done_prop.get("type") == "checkbox" else False
+                out.append({
+                    "notion_id": page.get("id", ""),
+                    "rakez_id": self._page_text(page, PROP_ID),
+                    "title": self._page_text(page, self._title_prop or "Name"),
+                    "completed": completed,
+                    "updated": page.get("last_edited_time", ""),
+                })
+            if not res.get("has_more"):
+                break
+            cursor = res.get("next_cursor")
+            if not cursor:
+                break
+        return out
+
     # --- bulk ---
     def sync_tasks(self, todos: list[dict], project_names: dict | None = None) -> dict:
         """Push every task to Notion. Returns counts, never raises."""

@@ -35,14 +35,15 @@
 - خطة صباحية، حل الأعذار، ومراجعة يومية.
 - يعمل مع **Gemini** عند إضافة المفتاح، وبدونه يقدّم وضع **Offline** مفيدًا بدون إنترنت.
 
-### 🔄 مزامنة تلقائية مع Joplin وGoogle Tasks وNotion
+### 🔄 مزامنة ثنائية الاتجاه مع Joplin وGoogle Tasks وNotion
 - **إجراء واحد لكل الخدمات**: إضافة المهمة أو تعديلها أو إتمامها أو إعادة فتحها أو حذفها يُحدّث كل خدمة متصلة في الخلفية — من الواجهة أو الودجت العائم أو سطر الأوامر أو الـ API المحلي.
+- **والعكس صحيح**: أتمّ المهمة من Google Tasks أو Joplin أو Notion فيعلّمها ركّز مكتملة محليًا، ثم يُبلّغ بقية الخدمات (يُفحص كل دقيقتين، وعند التشغيل، وعند **Sync now**).
 - **Joplin**: مهامك تظهر فورًا في `Projects/Lifebot/Tasks` مع tags وموعد استحقاق، وسحب مهام Joplin للبرنامج (زر Pull + تلقائي عند التشغيل). أمر `dedupe` لتنظيف التكرار.
-- **Google Tasks**: كل مهمة تُرسل تلقائيًا (بدون نسخ مكررة)، والإتمام والحذف ينتقلان معها.
-- **Notion**: قاعدة بيانات تختارها تستقبل المهام مع خصائص `Done` و`Category` و`Priority` و`Project` و`Completed at`، ويُنشئ ركّز الخصائص الناقصة عند أول مزامنة.
+- **Google Tasks**: كل مهمة تُرسل تلقائيًا (بدون نسخ مكررة)، والإتمام وإعادة الفتح والحذف ينتقلان في الاتجاهين.
+- **Notion**: قاعدة بيانات تختارها تستقبل المهام مع خصائص `Done` و`Category` و`Priority` و`Project` و`Completed at`، ويُنشئ ركّز الخصائص الناقصة عند أول مزامنة. تعليم `Done` في Notion يُتمّ المهمة في ركّز.
 - **Google Calendar**: تسجيل جلسات التركيز المنتهية كأحداث تلقائيًا.
-- **Sync now** لمزامنة كل المهام دفعة واحدة، و**Test connection** يتحقق فعليًا من الصلاحيات برسائل واضحة.
-- تفضّل التحكم اليدوي؟ أوقف **Sync tasks automatically** من **Settings → Integrations**.
+- **Sync now** يسحب المهام المكتملة من الخدمات ويزامن كل المهام دفعة واحدة، و**Test connection** يتحقق فعليًا من الصلاحيات برسائل واضحة.
+- تفضّل التحكم اليدوي؟ أوقف **المزامنة ثنائية الاتجاه** من **Settings → Integrations**.
 
 ### 📊 تحليلات وتقدّم
 - دقائق التركيز خلال 7 أيام، توزيع الدقائق حسب التصنيف، الأيام المتتالية (Streak)، المهام المنجزة.
@@ -115,7 +116,7 @@ python -m cli.app add "تصميم الصفحة" --project Website --priority hig
 python -m cli.app projects
 python -m cli.app stats --days 7
 python -m cli.app google-test          # فحص ربط Google
-python -m pytest tests -q              # 115 اختبارًا
+python -m pytest tests -q              # 122 اختبارًا
 ```
 
 ---
@@ -212,7 +213,7 @@ python -m cli.app plan | python -m cli.app review
 python -m cli.app dedupe [--apply]
 python -m cli.app google-test [--authorize]
 python -m cli.app notion-test                  # فحص توكن Notion وقاعدة البيانات
-python -m cli.app sync                         # إرسال المهام لكل التكاملات
+python -m cli.app sync                         # سحب المكتمل من الخدمات ثم إرسال الكل
 python -m cli.app telegram-test                # فحص التوكن + رسالة تجريبية
 python -m cli.app telegram-chat-id             # اكتشاف معرّف المحادثة
 python -m cli.app telegram-report [--no-send]  # التقرير (وإرساله إلى تلجرام)
@@ -249,7 +250,7 @@ python -m cli.app serve --port 8765
 ## 🧪 التطوير والبناء
 
 ```bash
-python -m pytest tests -q          # 115 اختبارًا
+python -m pytest tests -q          # 122 اختبارًا
 
 python packaging/build_windows.py  # dist/Rakez.exe
 iscc packaging/Rakez.iss           # dist/Rakez-Setup-<version>.exe
@@ -284,7 +285,7 @@ cli/app.py            أوامر Typer
 config/               config.yaml + prompt.py
 website/              الموقع التسويقي (GitHub Pages)
 packaging/            PyInstaller + Inno Setup + Linux
-tests/                115 اختبارًا
+tests/                122 اختبارًا
 ```
 
 ---
