@@ -31,13 +31,13 @@ PFX behind the same secrets and everything keeps working.
 # The certificate must be in Cert:\CurrentUser\My (or pass -PfxPath/-PfxPassword).
 powershell -ExecutionPolicy Bypass -File packaging\sign_windows.ps1 -Path dist\Rakez.exe
 powershell -ExecutionPolicy Bypass -File packaging\sign_windows.ps1 `
-    -Path dist\Rakez-Setup-2.2.0.exe -RequireTrusted:$false
+    -Path dist\Rakez-Setup-2.3.0.exe -RequireTrusted:$false
 ```
 
 Verify:
 
 ```powershell
-Get-AuthenticodeSignature .\dist\Rakez-Setup-2.2.0.exe |
+Get-AuthenticodeSignature .\dist\Rakez-Setup-2.3.0.exe |
     Format-List Status, StatusMessage, @{n='Signer';e={$_.SignerCertificate.Subject}}
 ```
 

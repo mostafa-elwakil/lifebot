@@ -3,7 +3,7 @@
 <img src="assets/logo.svg" width="88" alt="Rakez logo" />
 
 # Rakez ركّز
-**A complete personal productivity system: floating Pomodoro + tasks and projects + AI coach + Joplin and Google sync.**
+**A complete personal productivity system: floating Pomodoro + tasks and projects + AI coach + automatic Joplin, Google Tasks and Notion sync.**
 
 [![Release](https://img.shields.io/github/v/release/mostafa-elwakil/lifebot?label=latest&color=7aa2f7)](https://github.com/mostafa-elwakil/lifebot/releases/latest)
 [![Build](https://github.com/mostafa-elwakil/lifebot/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mostafa-elwakil/lifebot/actions/workflows/build-windows.yml)
@@ -35,11 +35,14 @@
 - A morning plan, help resolving excuses, and a daily review.
 - Works with **Gemini** when you add a key; without one it offers a genuinely useful **Offline** mode.
 
-### 🔄 Two-way sync
+### 🔄 Automatic sync with Joplin, Google Tasks and Notion
+- **One action, every service**: adding, editing, completing, reopening or deleting a task updates every connected service in the background — from the GUI, the floating widget, the CLI or the local API.
 - **Joplin**: your tasks show up instantly in `Projects/Lifebot/Tasks` with tags and a due date, and you can pull Joplin to-dos into the app (Pull button + automatically on startup). The `dedupe` command cleans up duplicates.
-- **Google Tasks**: push/pull tasks.
+- **Google Tasks**: every task is pushed automatically (no duplicate copies), and completions/deletions follow through.
+- **Notion**: a database of your choice receives the tasks with `Done`, `Category`, `Priority`, `Project` and `Completed at` properties; Rakez creates the properties it needs on the first sync.
 - **Google Calendar**: finished focus sessions are logged as events automatically.
-- **Test connection** really checks your permissions and returns friendly error messages (for example `access_denied` with the exact fix).
+- **Sync now** backfills everything in one click, and **Test connection** really checks your permissions with friendly, actionable errors.
+- Prefer manual control? Turn off **Sync tasks automatically** in **Settings → Integrations**.
 
 ### 📊 Analytics and progress
 - Focus minutes over the last 7 days, minutes per category, streak, and completed tasks.
@@ -114,7 +117,7 @@ python -m cli.app add "Design the landing page" --project Website --priority hig
 python -m cli.app projects
 python -m cli.app stats --days 7
 python -m cli.app google-test          # check the Google connection
-python -m pytest tests -q              # 87 tests
+python -m pytest tests -q              # 115 tests
 ```
 
 ---
@@ -132,6 +135,8 @@ GOOGLE_CLIENT_SECRET=
 API_TOKEN=                 # protects the local HTTP API (Bearer)
 TELEGRAM_BOT_TOKEN=        # bot token from @BotFather (optional)
 TELEGRAM_CHAT_ID=          # your Telegram chat ID (optional)
+NOTION_TOKEN=              # Internal Integration Secret (optional)
+NOTION_DATABASE_ID=        # target Notion database (optional)
 ```
 
 ### `config/config.yaml`
@@ -168,6 +173,17 @@ joplin:
 
 Bot commands: `/report` · `/tasks` · `/done N` · `/done id` · `/add title | project` · `/projects` · `/id` · `/help`.
 
+### Connecting Notion (task database)
+
+1. Open [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration** → copy the **Internal Integration Secret**.
+2. In Rakez → **Settings → 🌐 API**: paste the token → **💾 Save settings**.
+3. In Notion, open the database you want to use → **⋯ → Connections → add your integration** (without this the API returns 404).
+4. Copy the 32-character ID from the database URL and paste it in **Settings → 🔗 Integrations → 🗂️ Notion**.
+5. Press **🔌 Test** — Rakez checks the database and adds the properties it needs (`Rakez ID`, `Done`, `Category`, `Priority`, `Project`, `Completed at`).
+6. Press **🔄 Sync now** to push the existing tasks; new tasks are pushed automatically from then on.
+
+> The page title uses the database's existing title property, so any table works. Completing a task in Rakez ticks `Done` in Notion too.
+
 ---
 
 ## 🖥️ Usage
@@ -177,7 +193,7 @@ Bot commands: `/report` · `/tasks` · `/done N` · `/done id` · `/add title | 
 | Tab | What it does |
 |---|---|
 | ⏱️ Pomodoro | Pick a task and duration → send it to the floating widget and start |
-| 📋 Tasks | Add/complete/delete, projects and progress, push/pull Joplin and Google |
+| 📋 Tasks | Add/complete/delete, projects and progress, automatic sync with Joplin, Google Tasks and Notion |
 | 🧠 Hermes | Morning plan / resolve a snag / daily review |
 | 📊 Analytics | Focus stats, categories, and streak |
 | ⚙️ Settings | Sidebar sections: General, Appearance, Floating widget, Integrations, **API** (all keys + the local HTTP server), Updates |
@@ -197,6 +213,8 @@ python -m cli.app stats --days 7
 python -m cli.app plan | python -m cli.app review
 python -m cli.app dedupe [--apply]
 python -m cli.app google-test [--authorize]
+python -m cli.app notion-test                  # check the Notion token + database
+python -m cli.app sync                         # push tasks to every integration
 python -m cli.app telegram-test                # token check + test message
 python -m cli.app telegram-chat-id             # detect the chat ID
 python -m cli.app telegram-report [--no-send]  # report (and send it)
@@ -259,6 +277,8 @@ core/
   coach.py            Hermes (Gemini + offline)
   joplin.py           Joplin Web Clipper client
   google_sync.py      Calendar + Tasks (OAuth2)
+  notion.py           Notion push-sync client
+  sync.py             fan-out sync hub (Joplin / Google / Notion)
   telegram.py         Telegram bot (reports + commands)
   updater.py          update check/download/install
   api.py              local HTTP API

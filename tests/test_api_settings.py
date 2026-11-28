@@ -6,6 +6,9 @@ def test_api_settings_defaults(tmp_path):
     cfg = load_settings(tmp_path)
     assert cfg["api_port"] == 8765
     assert cfg["api_token"] == ""
+    assert cfg["notion_token"] == ""
+    assert cfg["notion_database_id"] == ""
+    assert cfg["auto_sync"] is True
 
 
 def test_api_settings_sanitize(tmp_path):
@@ -25,3 +28,16 @@ def test_api_settings_sanitize(tmp_path):
     cfg["api_port"] = "junk"        # unparsable → default
     save_settings(tmp_path, cfg)
     assert load_settings(tmp_path)["api_port"] == 8765
+
+
+def test_notion_settings_are_trimmed(tmp_path):
+    cfg = load_settings(tmp_path)
+    cfg["notion_token"] = "  secret  "
+    cfg["notion_database_id"] = "  db-id  "
+    cfg["auto_sync"] = 0
+    save_settings(tmp_path, cfg)
+
+    again = load_settings(tmp_path)
+    assert again["notion_token"] == "secret"
+    assert again["notion_database_id"] == "db-id"
+    assert again["auto_sync"] is False

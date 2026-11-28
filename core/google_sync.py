@@ -11,7 +11,7 @@ All google imports are lazy so the app works without these packages.
 """
 from __future__ import annotations
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCOPES = [
@@ -189,18 +189,95 @@ class GoogleSync:
             pass
         return "@default"
 
-    def push_task(self, title: str, notes: str = "") -> dict | None:
+    def push_task(self, title: str, notes: str = "", completed: bool = False) -> dict | None:
         """Add a task to Google Tasks. Never raises."""
         try:
             svc = self._tasks_service()
             if not svc:
                 return None
+            body = {"title": title, "notes": notes}
+            if completed:
+                body["status"] = "completed"
+                body["completed"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             t = svc.tasks().insert(tasklist=self._default_list(),
-                                   body={"title": title, "notes": notes}).execute()
+                                   body=body).execute()
             return {"id": t.get("id"), "title": t.get("title")}
         except Exception as e:
             self._set_error(e)
             return None
+
+    def update_task(self, task_id: str, title: str | None = None,
+                    notes: str | None = None) -> bool:
+        """Rename/annotate an existing Google Task. Never raises."""
+        if not task_id:
+            return False
+        body = {}
+        if title is not None:
+            body["title"] = title
+        if notes is not None:
+            body["notes"] = notes
+        if not body:
+            return True
+        try:
+            svc = self._tasks_service()
+            if not svc:
+                return False
+            svc.tasks().patch(tasklist=self._default_list(), task=task_id,
+                              body=body).execute()
+            return True
+        except Exception as e:
+            self._set_error(e)
+            return False
+
+    def set_task_status(self, task_id: str, completed: bool = True) -> bool:
+        """Mark a Google Task completed (or reopen it). Never raises."""
+        if not task_id:
+            return False
+        try:
+            svc = self._tasks_service()
+            if not svc:
+                return False
+            svc.tasks().patch(
+                tasklist=self._default_list(), task=task_id,
+                body={"status": "completed" if completed else "needsAction"},
+            ).execute()
+            return True
+        except Exception as e:
+            self._set_error(e)
+            return False
+
+    def delete_task(self, task_id: str) -> bool:
+        """Delete a Google Task. Never raises."""
+        if not task_id:
+            return False
+        try:
+            svc = self._tasks_service()
+            if not svc:
+                return False
+            svc.tasks().delete(tasklist=self._default_list(), task=task_id).execute()
+            return True
+        except Exception as e:
+            self._set_error(e)
+            return False
+
+    def find_task_id(self, title: str) -> str:
+        """Find an open Google Task by exact title (case-insensitive)."""
+        wanted = (title or "").strip().lower()
+        if not wanted:
+            return ""
+        try:
+            svc = self._tasks_service()
+            if not svc:
+                return ""
+            items = svc.tasks().list(tasklist=self._default_list(),
+                                     showCompleted=False, maxResults=100
+                                     ).execute().get("items", [])
+            for t in items:
+                if (t.get("title") or "").strip().lower() == wanted:
+                    return t.get("id", "")
+        except Exception as e:
+            self._set_error(e)
+        return ""
 
     def pull_tasks(self, max_n: int = 50) -> list[dict]:
         """Fetch open Google Tasks as Lifebot-style dicts. Never raises."""

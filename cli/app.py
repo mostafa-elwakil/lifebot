@@ -30,8 +30,63 @@ def main(lang: str = typer.Option("en", "--lang", "-l",
     set_language(lang)
 
 
+_hub = None
+
+
 def _store() -> SqliteStorage:
-    return SqliteStorage()
+    """Open the database and wire automatic integration sync (same as the GUI)."""
+    global _hub
+    store = SqliteStorage()
+    try:
+        from core.settings import load_settings
+        from core.joplin import JoplinClient
+        from core.google_sync import GoogleSync
+        from core.notion import NotionClient
+        from core.sync import IntegrationHub
+        from core.telegram import TelegramBot
+        cfg = load_settings(_data_dir())
+        joplin = JoplinClient(
+            base_url=cfg.get("joplin_base") or os.getenv("JOPLIN_BASE_URL", ""),
+            token=cfg.get("joplin_token") or os.getenv("JOPLIN_TOKEN", ""))
+        google = GoogleSync(
+            data_dir=_data_dir(),
+            client_id=cfg.get("google_client_id") or os.getenv("GOOGLE_CLIENT_ID", ""),
+            client_secret=cfg.get("google_client_secret") or os.getenv("GOOGLE_CLIENT_SECRET", ""))
+        notion = NotionClient(
+            token=cfg.get("notion_token") or os.getenv("NOTION_TOKEN", ""),
+            database_id=cfg.get("notion_database_id") or os.getenv("NOTION_DATABASE_ID", ""))
+        telegram = TelegramBot(
+            token=cfg.get("telegram_token") or os.getenv("TELEGRAM_BOT_TOKEN", ""),
+            chat_id=cfg.get("telegram_chat_id") or os.getenv("TELEGRAM_CHAT_ID", ""),
+            storage=store)
+
+        def notify_done(title: str):
+            if cfg.get("telegram_reports", True) and telegram.configured:
+                remaining = len([x for x in store.get_todos() if not x.get("completed")])
+                telegram.send(tf("✅ Done: {name}\n📋 {n} task(s) left.",
+                                 name=title, n=remaining))
+
+        hub = IntegrationHub(
+            store, joplin=joplin, google=google, notion=notion,
+            enabled=lambda: bool(cfg.get("auto_sync", True)),
+            notify_done=notify_done,
+            project_lookup=lambda pid: (store.get_project(pid) or {}).get("name", ""),
+            joplin_folder=cfg.get("joplin_folder", JOPLIN_DEFAULT_FOLDER),
+            joplin_tags=cfg.get("joplin_tags", "task,lifebot"))
+        hub.attach()
+        _hub = hub
+    except Exception:
+        _hub = None
+    return store
+
+
+def _flush_sync(timeout: float = 15.0) -> None:
+    """Wait for the background sync queue before the CLI process exits."""
+    if _hub is not None:
+        try:
+            _hub.flush(timeout)
+        except Exception:
+            pass
 
 
 def _data_dir() -> Path:
@@ -83,6 +138,7 @@ def add(title: str, category: str = "Deep Work", priority: str = "medium", estim
                 raise typer.Exit(1)
         pid = proj["id"]
     t = s.add_todo(title, category, priority, estimate, project_id=pid)
+    _flush_sync()
     label = f" [{proj['name']}]" if proj else ""
     console.print(f"[green]{tr('Added:')}[/green] {t['title']}{label} "
                   f"[{tr(t['category'])}] (id={t['id']})")
@@ -146,6 +202,7 @@ def done(key: str):
     """Mark task done by id or title."""
     s = _store()
     ok = s.set_completed(key, True)
+    _flush_sync()
     console.print(f"[green]{tr('Done x')}[/green]" if ok
                   else f"[red]{tr('Not found')}[/red]")
 
@@ -155,6 +212,7 @@ def rm(key: str):
     """Delete a task."""
     s = _store()
     ok = s.delete_todo(key)
+    _flush_sync()
     console.print(f"[green]{tr('Deleted')}[/green]" if ok
                   else f"[red]{tr('Not found')}[/red]")
 
@@ -187,8 +245,8 @@ def google_test(authorize: bool = typer.Option(False, "--authorize", "-a",
     """Test the Google Calendar + Tasks connection (real API calls)."""
     from core.google_sync import GoogleSync
     from core.settings import load_settings
-    cfg = load_settings("data")
-    gs = GoogleSync(data_dir="data",
+    cfg = load_settings(_data_dir())
+    gs = GoogleSync(data_dir=_data_dir(),
                     client_id=cfg.get("google_client_id", ""),
                     client_secret=cfg.get("google_client_secret", ""))
     if authorize:
@@ -203,6 +261,45 @@ def google_test(authorize: bool = typer.Option(False, "--authorize", "-a",
     console.print(f"[{color}]{res['message']}[/{color}]")
     if not res["ok"]:
         raise typer.Exit(1)
+
+
+@app.command(name="notion-test")
+def notion_test():
+    """Test the Notion token + database and create the properties Rakez needs."""
+    from core.notion import NotionClient
+    from core.settings import load_settings
+    cfg = load_settings(_data_dir())
+    client = NotionClient(
+        token=cfg.get("notion_token") or os.getenv("NOTION_TOKEN", ""),
+        database_id=cfg.get("notion_database_id") or os.getenv("NOTION_DATABASE_ID", ""))
+    res = client.test_connection()
+    color = "green" if res.get("ok") else "yellow"
+    console.print(f"[{color}]{res.get('message', '')}[/{color}]")
+    if not res.get("ok"):
+        raise typer.Exit(1)
+
+
+@app.command()
+def sync():
+    """Push every task to every configured service (Joplin, Google Tasks, Notion)."""
+    _store()
+    if _hub is None:
+        console.print(f"[yellow]{tr('No integrations configured yet.')}[/yellow]")
+        return
+    res = _hub.sync_all()
+    j = res.get("joplin") or {}
+    if j:
+        console.print(tr("Joplin: {c} added, {u} updated, {d} completed").format(
+            c=j.get("created", 0), u=j.get("updated", 0), d=j.get("completed", 0)))
+    g = res.get("google") or {}
+    if g:
+        console.print(tr("Google Tasks: {n} pushed").format(n=g.get("pushed", 0)))
+    n = res.get("notion") or {}
+    if n:
+        console.print(tr("Notion: {c} created, {u} updated").format(
+            c=n.get("created", 0), u=n.get("updated", 0)))
+    for err in res.get("errors") or []:
+        console.print(f"[yellow]{err}[/yellow]")
 
 
 @app.command()
@@ -321,7 +418,7 @@ def serve(port: int = 8765):
     """Run the local HTTP API (for TestSprite backend runs and integrations)."""
     from core.api import run_server
     console.print(f"Rakez API on http://127.0.0.1:{port}  (Ctrl+C to stop)")
-    run_server(port=port)
+    run_server(port=port, store=_store())
 
 
 if __name__ == "__main__":

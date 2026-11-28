@@ -17,6 +17,10 @@ class Todo:
     project_id: str = ""  # "" = no project
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     completed_at: str = ""  # set when the task is marked done (ISO), cleared on undo
+    # --- external ids (auto-sync mapping) ---
+    google_id: str = ""
+    joplin_id: str = ""
+    notion_id: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -41,6 +45,9 @@ class Todo:
             project_id=str(d.get("project_id") or "").strip(),
             created_at=d.get("created_at") or datetime.now().isoformat(),
             completed_at=str(d.get("completed_at") or ""),
+            google_id=str(d.get("google_id") or ""),
+            joplin_id=str(d.get("joplin_id") or ""),
+            notion_id=str(d.get("notion_id") or ""),
         )
 
 

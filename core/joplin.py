@@ -257,6 +257,47 @@ class JoplinClient:
             pass
         return touched
 
+    def set_completed(self, note_id: str, done: bool = True) -> bool:
+        """Tick/untick a Joplin to-do. Never raises."""
+        if not note_id:
+            return False
+        value = int(datetime.now().timestamp() * 1000) if done else 0
+        return bool(self._put(f"/notes/{note_id}", {"todo_completed": value}))
+
+    def update_note(self, note_id: str, title: str | None = None,
+                    body: str | None = None) -> bool:
+        """Rename/re-describe an existing note. Never raises."""
+        if not note_id:
+            return False
+        payload = {}
+        if title is not None:
+            payload["title"] = title
+        if body is not None:
+            payload["body"] = body
+        if not payload:
+            return True
+        return bool(self._put(f"/notes/{note_id}", payload))
+
+    def delete_note(self, note_id: str) -> bool:
+        """Move a note to the Joplin trash. Never raises."""
+        if not note_id:
+            return False
+        res = self._request("DELETE", f"/notes/{note_id}")
+        return res is not None and not self.last_error
+
+    def find_todo_id(self, title: str, folder_name: str = DEFAULT_FOLDER) -> str:
+        """Find a to-do in the notebook by exact title (case-insensitive)."""
+        wanted = (title or "").strip().lower()
+        if not wanted or not self.available:
+            return ""
+        folder_id = self.ensure_folder(folder_name)
+        if not folder_id:
+            return ""
+        for n in self.get_notes_in_folder(folder_id):
+            if (isinstance(n, dict) and (n.get("title") or "").strip().lower() == wanted):
+                return n.get("id", "")
+        return ""
+
     def _create_note_idempotent(self, folder_id: str, title: str, body: str,
                                 tags: str, due_ms: int) -> dict | None:
         """Create a todo exactly once.

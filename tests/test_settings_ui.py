@@ -7,10 +7,11 @@ import urllib.request
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QLineEdit  # noqa: E402
 
 import run_lifebot as rl  # noqa: E402
 from core import i18n  # noqa: E402
+from core.settings import load_settings  # noqa: E402
 from core.storage import SqliteStorage  # noqa: E402
 
 _app = None
@@ -116,5 +117,39 @@ def test_settings_sidebar_sections_and_api(tmp_path, monkeypatch):
     finally:
         i18n.set_language("en")
         win._stop_api_server()
+        win.close()
+        store.close()
+
+
+def test_notion_settings_and_sync_toggle(tmp_path, monkeypatch):
+    _app_instance()
+    monkeypatch.setattr(rl, "DATA_DIR", tmp_path)
+    store = SqliteStorage(data_dir=tmp_path)
+    win = rl.RakezMainWindow(store)
+    try:
+        # the sync hub is subscribed to storage events
+        assert win.sync_hub is not None
+        assert store._listeners
+
+        win._jump_to_settings("integrations")
+        assert hasattr(win, "notion_db_edit")
+        assert hasattr(win, "notion_status_label")
+        assert win.auto_sync_check.isChecked() is True
+
+        win._jump_to_settings("api")
+        assert win.notion_token_edit.echoMode() == QLineEdit.EchoMode.Password
+        win.notion_token_edit.setText("  secret  ")
+        win.notion_db_edit.setText("  db-id  ")
+        win.auto_sync_check.setChecked(False)
+        win._save_settings()
+
+        cfg = load_settings(tmp_path)
+        assert cfg["notion_token"] == "secret"
+        assert cfg["notion_database_id"] == "db-id"
+        assert cfg["auto_sync"] is False
+        assert win.notion.token == "secret"
+        assert win.notion.database_id == "db-id"
+    finally:
+        i18n.set_language("en")
         win.close()
         store.close()

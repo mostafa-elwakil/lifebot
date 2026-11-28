@@ -30,6 +30,8 @@ from core.settings import load_settings, save_settings, ACCENTS, DEFAULTS as SET
 from core.settings import (SOUND_NAMES, DESIGNS, BACKGROUNDS, THEMES,
                            THEME_BACKGROUNDS, valid_hex, is_light_color)
 from core.google_sync import GoogleSync
+from core.notion import NotionClient
+from core.sync import IntegrationHub
 from core.telegram import TelegramBot
 from core.api import run_server
 from core.i18n import (LANGUAGES, detect_language, get_language, is_arabic,
@@ -1039,6 +1041,18 @@ class RakezMainWindow(QMainWindow):
             token=self.app_settings.get("telegram_token", ""),
             chat_id=self.app_settings.get("telegram_chat_id", ""),
             storage=self.storage)
+        self.notion = NotionClient(
+            token=self.app_settings.get("notion_token", ""),
+            database_id=self.app_settings.get("notion_database_id", ""))
+        # fan-out sync: storage events → Google Tasks / Joplin / Notion
+        self.sync_hub = IntegrationHub(
+            self.storage, joplin=self.joplin, google=self.gsync,
+            notion=self.notion,
+            enabled=lambda: bool(self.app_settings.get("auto_sync", True)),
+            notify_done=self._telegram_notify_done,
+            project_lookup=lambda pid: (self.storage.get_project(pid) or {}).get("name", ""),
+            joplin_folder=self.joplin_folder, joplin_tags=self.joplin_tags)
+        self.sync_hub.attach()
         self._telegram_poller = None
         self._telegram_last_daily = ""
         # settings sidebar remembers the section across language switches
@@ -1738,6 +1752,14 @@ class RakezMainWindow(QMainWindow):
         keys_row.addStretch()
         layout.addLayout(keys_row)
 
+        self.auto_sync_check = QCheckBox(
+            "Sync tasks automatically (Google Tasks, Joplin, Notion)")
+        self.auto_sync_check.setToolTip(
+            "When a task is added, edited, completed or deleted, update every "
+            "connected service in the background")
+        self.auto_sync_check.setChecked(bool(s.get("auto_sync", True)))
+        layout.addWidget(self.auto_sync_check)
+
         # --- Joplin ---
         layout.addSpacing(8)
         layout.addWidget(self._settings_subheading("🗒️ Joplin"))
@@ -1763,7 +1785,8 @@ class RakezMainWindow(QMainWindow):
         layout.addWidget(self._settings_subheading("📅 Google Calendar + Tasks"))
         layout.addWidget(self._settings_hint(
             "Save the OAuth client ID and secret under API first, "
-            "then authorize once here."))
+            "then authorize once here. New tasks are pushed to Google Tasks "
+            "automatically."))
         grow = QHBoxLayout()
         auth_btn = QPushButton("🔓 Authorize")
         auth_btn.setToolTip("Open browser once to grant access")
@@ -1775,6 +1798,38 @@ class RakezMainWindow(QMainWindow):
         grow.addWidget(test_btn)
         grow.addStretch()
         layout.addLayout(grow)
+
+        # --- Notion ---
+        layout.addSpacing(8)
+        layout.addWidget(self._settings_subheading("🗂️ Notion"))
+        layout.addWidget(self._settings_hint(
+            "Paste the integration token under API, share the database with "
+            "your integration in Notion (⋯ → Connections), then paste its ID "
+            "here. Rakez adds the properties it needs automatically."))
+        notion_row = QHBoxLayout()
+        notion_row.addWidget(QLabel("Database ID:"))
+        self.notion_db_edit = QLineEdit()
+        self.notion_db_edit.setPlaceholderText("32-character ID from the database URL")
+        self.notion_db_edit.setText(s.get("notion_database_id", ""))
+        notion_row.addWidget(self.notion_db_edit, stretch=1)
+        layout.addLayout(notion_row)
+
+        notion_btns = QHBoxLayout()
+        notion_test = QPushButton("🔌 Test")
+        notion_test.setToolTip("Check the token, the database and its properties")
+        notion_test.clicked.connect(self._test_notion)
+        notion_btns.addWidget(notion_test)
+        notion_sync = QPushButton("🔄 Sync now")
+        notion_sync.setToolTip("Push every task to Notion, Joplin and Google Tasks")
+        notion_sync.clicked.connect(self._sync_all_integrations)
+        notion_btns.addWidget(notion_sync)
+        notion_btns.addStretch()
+        layout.addLayout(notion_btns)
+
+        self.notion_status_label = QLabel("")
+        self.notion_status_label.setFont(QFont("Segoe UI", 8))
+        self.notion_status_label.setProperty("muted", True)
+        layout.addWidget(self.notion_status_label)
 
         # --- Telegram ---
         layout.addSpacing(8)
@@ -1877,6 +1932,14 @@ class RakezMainWindow(QMainWindow):
         self.tg_token_edit.setPlaceholderText("Bot token from @BotFather")
         self.tg_token_edit.setText(s.get("telegram_token", ""))
         layout.addWidget(self.tg_token_edit)
+
+        layout.addSpacing(8)
+        layout.addWidget(QLabel("🗂️ Notion integration token"))
+        self.notion_token_edit = QLineEdit()
+        self.notion_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.notion_token_edit.setPlaceholderText("Internal Integration Secret (notion.so/my-integrations)")
+        self.notion_token_edit.setText(s.get("notion_token", ""))
+        layout.addWidget(self.notion_token_edit)
 
         # --- local HTTP server ---
         layout.addSpacing(14)
@@ -2475,6 +2538,10 @@ class RakezMainWindow(QMainWindow):
         s["opacity"] = self.opacity_spin.value()
         s["google_client_id"] = self.google_id_edit.text().strip()
         s["google_client_secret"] = self.google_secret_edit.text().strip()
+        s["notion_token"] = self.notion_token_edit.text().strip()
+        s["notion_database_id"] = self.notion_db_edit.text().strip()
+        if hasattr(self, "auto_sync_check"):
+            s["auto_sync"] = bool(self.auto_sync_check.isChecked())
         if hasattr(self, "api_port_spin"):
             s["api_port"] = int(self.api_port_spin.value())
         if hasattr(self, "api_token_edit"):
@@ -2491,10 +2558,16 @@ class RakezMainWindow(QMainWindow):
         self.joplin.base_url = s["joplin_base"].rstrip("/")
         self.joplin_folder = s["joplin_folder"]
         self.joplin_tags = s["joplin_tags"]
+        self.notion.token = s["notion_token"]
+        self.notion.database_id = s["notion_database_id"]
+        self.sync_hub.joplin_folder = self.joplin_folder
+        self.sync_hub.joplin_tags = self.joplin_tags
         self.gsync.client_id = s["google_client_id"]
         self.gsync.client_secret = s["google_client_secret"]
         self.gsync._cal = self.gsync._tasks = None
         self.google_status_label.setText(f"Google: {self.gsync.status()}")
+        if hasattr(self, "notion_status_label"):
+            self.notion_status_label.setText(f"Notion: {self.notion.status()}")
         self._apply_telegram_settings(s, persist=False)
         self.floating_widget.set_accent(s["accent"])
         self.floating_widget.set_sound(s["sound"])
@@ -2574,6 +2647,70 @@ class RakezMainWindow(QMainWindow):
             QMessageBox.warning(self, t("Google Test"),
                                 tf("Connection failed:\n\n{msg}", msg=res['message']))
 
+    def _apply_notion_from_ui(self) -> bool:
+        """Use the values typed in Settings even before Save."""
+        try:
+            self.notion.token = self.notion_token_edit.text().strip()
+            self.notion.database_id = self.notion_db_edit.text().strip()
+        except Exception:
+            pass
+        if not self.notion.available:
+            self.notion_status_label.setText(f"⚠ {self.notion.status()}")
+            return False
+        return True
+
+    def _test_notion(self):
+        if not self._apply_notion_from_ui():
+            return
+        self.notion_status_label.setText(t("⏳ testing Notion..."))
+        QApplication.processEvents()
+        res = self.notion.test_connection()
+        if res.get("ok"):
+            self.notion_status_label.setText(f"✓ {res['message']}")
+            QMessageBox.information(self, t("Notion Test"),
+                                    tf("Connection OK\n\n{msg}", msg=res["message"]))
+        else:
+            self.notion_status_label.setText(
+                tf("⚠ Notion: {err}", err=res.get("message", "")))
+            QMessageBox.warning(self, t("Notion Test"),
+                                tf("Connection failed:\n\n{msg}",
+                                   msg=res.get("message", "")))
+
+    def _sync_all_integrations(self):
+        """Push every task to all configured services (manual full sync)."""
+        self._apply_notion_from_ui()
+        self.notion_status_label.setText(t("⏳ syncing tasks..."))
+        QApplication.processEvents()
+        try:
+            res = self.sync_hub.sync_all()
+        except Exception as e:
+            res = {"errors": [str(e)[:160]]}
+        parts = []
+        j = res.get("joplin") or {}
+        if j:
+            parts.append(tf("Joplin: {c} added, {u} updated, {d} completed",
+                            c=j.get("created", 0), u=j.get("updated", 0),
+                            d=j.get("completed", 0)))
+        g = res.get("google") or {}
+        if g:
+            parts.append(tf("Google Tasks: {n} pushed", n=g.get("pushed", 0)))
+        n = res.get("notion") or {}
+        if n:
+            parts.append(tf("Notion: {c} created, {u} updated",
+                            c=n.get("created", 0), u=n.get("updated", 0)))
+        errors = res.get("errors") or []
+        summary = "\n".join(parts) or t("No integrations configured yet.")
+        if errors:
+            summary += "\n\n" + "\n".join(errors[:4])
+            self.notion_status_label.setText(tf("⚠ {err}", err=errors[0]))
+            QMessageBox.warning(self, t("Sync"), summary)
+        else:
+            self.notion_status_label.setText(
+                t("✓ tasks synced to Notion") if n else t("✓ sync finished"))
+            QMessageBox.information(self, t("Sync"), summary)
+        self._load_todos_list()
+        self._refresh_task_dropdown()
+
     def _push_selected_to_google(self):
         key = self._selected_todo_key()
         if not key:
@@ -2583,6 +2720,8 @@ class RakezMainWindow(QMainWindow):
         if not todo:
             return
         res = self.gsync.push_task(todo["title"], f"Category: {todo.get('category','')}")
+        if isinstance(res, dict) and res.get("id"):
+            self.storage.set_sync_ids(todo["id"], google_id=res["id"])
         self.google_status_label.setText(
             t("✓ in Google Tasks") if res
             else tf("⚠ Google: {err}", err=self.gsync.last_error or self.gsync.status()))
@@ -2647,8 +2786,6 @@ class RakezMainWindow(QMainWindow):
         """Refresh lists when a task is quick-added or completed from the widget."""
         self._load_todos_list()
         self._refresh_task_dropdown()
-        if isinstance(todo, dict) and todo.get("completed"):
-            self._telegram_notify_done(todo.get("title", ""))
 
     def _on_widget_resized(self, w: int, h: int):
         """Mirror corner-resize dimensions into the Settings tab (debounced save)."""
@@ -2831,19 +2968,7 @@ class RakezMainWindow(QMainWindow):
             pid = self.project_combo.currentData() or ""
         if title:
             self.storage.add_todo(title, c, priority=p, project_id=pid)
-            # إضافة المهمة لـ Joplin تلقائياً — must never crash the GUI
-            try:
-                created = self.joplin.create_todo(title=title, body=f"Category: {c}\nPriority: {p}",
-                                                  folder_name=self.joplin_folder, tags=self.joplin_tags)
-                if created is None and self.joplin.available:
-                    print(f"[joplin] failed: {self.joplin.last_error}")
-                    self.joplin_status_label.setText(
-                        tf("⚠ Joplin: {err}", err=self.joplin.friendly_error()))
-                elif created is not None:
-                    self.joplin_status_label.setText(t("✓ in Joplin All-Tasks"))
-            except Exception as e:
-                print(f"[joplin] error: {e}")
-
+            # Joplin / Google Tasks / Notion are updated by the sync hub
             self.new_task_input.clear()
             self._load_todos_list()
             self._refresh_task_dropdown()
@@ -2855,8 +2980,6 @@ class RakezMainWindow(QMainWindow):
         todos = {t["id"]: t for t in self.storage.get_todos()}
         cur = todos.get(key, {}).get("completed", False)
         self.storage.set_completed(key, not cur)
-        if not cur:
-            self._telegram_notify_done(todos.get(key, {}).get("title", ""))
         self._load_todos_list()
         self._refresh_task_dropdown()
 

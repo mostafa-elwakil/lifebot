@@ -46,6 +46,9 @@ class SqliteStorage:
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
+        # integration sync listeners: fn(event, todo_dict) — kept simple so the
+        # storage layer stays free of network code (see core/sync.py)
+        self._listeners: list = []
         self._init_schema()
         self._migrate_json_once()
 
@@ -57,7 +60,8 @@ class SqliteStorage:
             id TEXT PRIMARY KEY, title TEXT NOT NULL, category TEXT DEFAULT 'Deep Work',
             completed INTEGER DEFAULT 0, priority TEXT DEFAULT 'medium',
             estimate_pomodoros INTEGER DEFAULT 1, done_pomodoros INTEGER DEFAULT 0,
-            project_id TEXT DEFAULT '', created_at TEXT, completed_at TEXT DEFAULT ''
+            project_id TEXT DEFAULT '', created_at TEXT, completed_at TEXT DEFAULT '',
+            google_id TEXT DEFAULT '', joplin_id TEXT DEFAULT '', notion_id TEXT DEFAULT ''
         )""")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS sessions(
@@ -81,6 +85,13 @@ class SqliteStorage:
             self._conn.commit()
         except sqlite3.OperationalError:
             pass  # column already exists
+        # old DBs: external ids for auto-sync (Google Tasks / Joplin / Notion)
+        for column in ("google_id", "joplin_id", "notion_id"):
+            try:
+                self._conn.execute(f"ALTER TABLE todos ADD COLUMN {column} TEXT DEFAULT ''")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
     def _migrate_json_once(self):
         cur = self._conn.cursor()
@@ -114,8 +125,8 @@ class SqliteStorage:
 
     _INSERT_SQL = (
         "INSERT OR REPLACE INTO todos(id,title,category,completed,priority,"
-        "estimate_pomodoros,done_pomodoros,project_id,created_at,completed_at) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?)"
+        "estimate_pomodoros,done_pomodoros,project_id,created_at,completed_at,"
+        "google_id,joplin_id,notion_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
     )
 
     @_locked
@@ -124,7 +135,8 @@ class SqliteStorage:
             self._INSERT_SQL,
             (todo.id, todo.title, todo.category, int(todo.completed), todo.priority,
              todo.estimate_pomodoros, todo.done_pomodoros, todo.project_id,
-             todo.created_at, todo.completed_at),
+             todo.created_at, todo.completed_at, todo.google_id, todo.joplin_id,
+             todo.notion_id),
         )
         if commit:
             self._conn.commit()
@@ -147,8 +159,25 @@ class SqliteStorage:
                     self._INSERT_SQL,
                     (todo.id, todo.title, todo.category, int(todo.completed),
                      todo.priority, todo.estimate_pomodoros, todo.done_pomodoros,
-                     todo.project_id, todo.created_at, todo.completed_at),
+                     todo.project_id, todo.created_at, todo.completed_at,
+                     todo.google_id, todo.joplin_id, todo.notion_id),
                 )
+
+    # --- integration events ---
+    def add_listener(self, fn) -> None:
+        """Register fn(event, todo_dict) for created/updated/completed/
+        reopened/deleted. Listeners must be quick and never raise."""
+        if fn not in self._listeners:
+            self._listeners.append(fn)
+
+    def _emit(self, event: str, todo: dict | None) -> None:
+        if not todo or not self._listeners:
+            return
+        for fn in list(self._listeners):
+            try:
+                fn(event, dict(todo))
+            except Exception:
+                pass  # a broken integration must never break task storage
 
     @_locked
     def add_todo(self, title: str, category: str = "Deep Work", priority: str = "medium",
@@ -159,7 +188,9 @@ class SqliteStorage:
         todo = Todo(title=title, category=category, priority=priority,
                     estimate_pomodoros=estimate, project_id=project_id)
         self._insert_todo(todo)
-        return todo.to_dict()
+        created = todo.to_dict()
+        self._emit("created", created)
+        return created
 
     @_locked
     def log_session(self, session: dict):
@@ -195,20 +226,32 @@ class SqliteStorage:
              todo_id_or_title, todo_id_or_title),
         )
         self._conn.commit()
-        return cur.rowcount > 0
+        if cur.rowcount <= 0:
+            return False
+        todo = self.get_todo(todo_id_or_title)
+        self._emit("completed" if completed else "reopened", todo)
+        return True
 
     @_locked
     def delete_todo(self, todo_id_or_title: str) -> bool:
+        todo = self.get_todo(todo_id_or_title)
         cur = self._conn.cursor()
         cur.execute("DELETE FROM todos WHERE id=? OR title=?", (todo_id_or_title, todo_id_or_title))
         self._conn.commit()
-        return cur.rowcount > 0
+        if cur.rowcount > 0:
+            self._emit("deleted", todo)
+            return True
+        return False
 
     @_locked
     def clear_completed(self) -> int:
         cur = self._conn.cursor()
+        cur.execute("SELECT * FROM todos WHERE completed=1")
+        removed = [dict(r) | {"completed": True} for r in cur.fetchall()]
         cur.execute("DELETE FROM todos WHERE completed=1")
         self._conn.commit()
+        for todo in removed:
+            self._emit("deleted", todo)
         return cur.rowcount
 
     @_locked
@@ -252,7 +295,27 @@ class SqliteStorage:
             self._conn.execute(
                 f"UPDATE todos SET {', '.join(sets)} WHERE id=?", (*vals, row["id"]))
             self._conn.commit()
+            updated = self.get_todo(row["id"])
+            if updated is not None:
+                if "completed" in fields and bool(updated["completed"]) != bool(row["completed"]):
+                    self._emit("completed" if updated["completed"] else "reopened", updated)
+                else:
+                    self._emit("updated", updated)
+            return updated
         return self.get_todo(row["id"])
+
+    @_locked
+    def set_sync_ids(self, todo_id: str, **ids) -> bool:
+        """Store external ids (google_id/joplin_id/notion_id) without events."""
+        allowed = {k: str(v or "") for k, v in ids.items()
+                   if k in ("google_id", "joplin_id", "notion_id")}
+        if not allowed:
+            return False
+        sets = ", ".join(f"{k}=?" for k in allowed)
+        cur = self._conn.execute(
+            f"UPDATE todos SET {sets} WHERE id=?", (*allowed.values(), todo_id))
+        self._conn.commit()
+        return cur.rowcount > 0
 
     @_locked
     def import_todos(self, todos: list[dict]) -> dict:
@@ -277,7 +340,10 @@ class SqliteStorage:
                     pri = "medium"
                 todo = Todo(title=title, category=cat,
                             completed=bool(t.get("completed", False)),
-                            priority=pri)
+                            priority=pri,
+                            google_id=str(t.get("google_id") or ""),
+                            joplin_id=str(t.get("joplin_id") or ""),
+                            notion_id=str(t.get("notion_id") or ""))
                 self._insert_todo(todo)
                 existing.add(title.lower())
                 added += 1

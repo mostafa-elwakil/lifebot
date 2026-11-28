@@ -12,7 +12,7 @@
 <link rel="alternate" hreflang="ar" href="https://mostafa-elwakil.github.io/lifebot/ar/" />
 <link rel="alternate" hreflang="en" href="https://mostafa-elwakil.github.io/lifebot/" />
 <link rel="alternate" hreflang="x-default" href="https://mostafa-elwakil.github.io/lifebot/" />
-<link rel="stylesheet" href="../styles.css?v=2.2.0" />
+<link rel="stylesheet" href="../styles.css?v=2.3.0" />
 
 <meta property="og:type" content="website" />
 <meta property="og:title" content="Rakez ركّز — بومودورو عائم + مهام ومشاريع + مدرب ذكي" />
@@ -33,7 +33,7 @@
   "description": "مؤقت بومودورو عائم فوق كل البرامج، مهام ومشاريع بنسبة إنجاز، مدرب ذكي، ومزامنة مع Joplin وGoogle.",
   "url": "https://mostafa-elwakil.github.io/lifebot/ar/",
   "downloadUrl": "https://github.com/mostafa-elwakil/lifebot/releases/latest",
-  "softwareVersion": "2.2.0",
+  "softwareVersion": "2.3.0",
   "inLanguage": "ar",
   "author": { "@type": "Person", "name": "Mostafa Elwakil" },
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
@@ -98,7 +98,7 @@
         <p class="lede">
           نظام إنتاجية واحد يجمع <strong>مؤقت بومودورو عائم</strong> فوق كل البرامج،
           <strong>مهام ومشاريع بنسبة إنجاز</strong>، <strong>مدربًا ذكيًا</strong>،
-          ومزامنة مع <strong>Joplin</strong> و<strong>Google</strong> — بواجهة عربية وإنجليزية، وتصميم فاتح وداكن.
+          ومزامنة تلقائية مع <strong>Joplin</strong> و<strong>Google Tasks</strong> و<strong>Notion</strong> — بواجهة عربية وإنجليزية، وتصميم فاتح وداكن.
         </p>
         <div class="hero-cta">
           <a class="btn btn-primary btn-lg" href="#download" data-download-link>
@@ -200,8 +200,8 @@
 
         <article class="card reveal">
           <div class="card-ico bg-amber">📅</div>
-          <h3>Google Calendar &amp; Tasks</h3>
-          <p>سجّل جلسات التركيز المنتهية كأحداث تقويم تلقائيًا، وادفع/اسحب مهام Google Tasks. زر «اختبار الاتصال» يتحقق فعليًا من الصلاحيات.</p>
+          <h3>مزامنة تلقائية في كل مكان</h3>
+          <p>أضف المهمة أو عدّلها أو أتمّها أو احذفها مرة واحدة — يحدّث ركّز Google Tasks وJoplin وNotion في الخلفية بدون نسخ مكررة. وزر «اختبار الاتصال» يتحقق فعليًا من الصلاحيات.</p>
         </article>
 
         <article class="card reveal">
@@ -328,7 +328,14 @@
           <div class="int-logo gtask">✓</div>
           <div>
             <h3>Google Tasks</h3>
-            <p>دفع وسحب المهام بين ركّز وGoogle Tasks بدون نسخ ولصق.</p>
+            <p>كل مهمة تُرسل تلقائيًا، وإتمامها أو حذفها من ركّز ينتقل معها — بدون نسخ ولصق أو تكرار.</p>
+          </div>
+        </div>
+        <div class="integration reveal">
+          <div class="int-logo notion">N</div>
+          <div>
+            <h3>Notion</h3>
+            <p>أرسل المهام إلى قاعدة بيانات تختارها مع الإتمام والتصنيف والأولوية والمشروع وتاريخ الإنجاز. ويجهّز ركّز الخصائص تلقائيًا.</p>
           </div>
         </div>
         <div class="integration reveal">
@@ -427,6 +434,10 @@
           <p>أنشئ OAuth Client من نوع <em>Desktop app</em> في Google Cloud Console، فعّل Calendar وTasks، وأضف بريدك في <strong>Test users</strong>، ثم الصق Client ID وSecret في <strong>الإعدادات → API</strong> واضغط <em>Authorize</em> ثم <em>Test connection</em>.</p>
         </details>
         <details>
+          <summary>كيف أضبط Notion؟</summary>
+          <p>أنشئ تكاملًا من <em>notion.so/my-integrations</em>، وشارك قاعدة البيانات معه (⋯ ← Connections)، ثم الصق السر في <strong>الإعدادات → API</strong> ومعرّف قاعدة البيانات في <strong>الإعدادات → التكاملات → Notion</strong>. اضغط <em>Test</em> ثم <em>Sync now</em>.</p>
+        </details>
+        <details>
           <summary>ماذا يحدث لبياناتي عند التحديث؟</summary>
           <p>لا شيء. البيانات في <code>%APPDATA%\Rakez\data</code> منفصلة عن ملفات البرنامج، لذا تبقى كما هي بعد كل تحديث.</p>
         </details>
@@ -471,10 +482,10 @@
   </div>
   <div class="container footer-bottom">
     <p>© <span data-year>2026</span> Mostafa Elwakil — صُنع بـ ❤️</p>
-    <p class="muted">Rakez ليس تابعًا لـ Google أو Joplin.</p>
+    <p class="muted">Rakez ليس تابعًا لـ Google أو Joplin أو Notion.</p>
   </div>
 </footer>
 
-<script src="../main.js?v=2.2.0" defer></script>
+<script src="../main.js?v=2.3.0" defer></script>
 </body>
 </html>

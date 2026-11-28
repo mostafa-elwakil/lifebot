@@ -15,6 +15,11 @@ DEFAULTS = {
     "sound": "Default beep",
     "google_client_id": "",
     "google_client_secret": "",
+    # --- Notion (push-sync of tasks) ---
+    "notion_token": "",
+    "notion_database_id": "",
+    # --- task auto-sync fan-out (Google Tasks / Joplin / Notion) ---
+    "auto_sync": True,
     "design": "pill",
     "language": "",
     "theme": "dark",
@@ -146,6 +151,9 @@ def load_settings(data_dir: str | Path) -> dict:
     except (TypeError, ValueError):
         cfg["api_port"] = 8765
     cfg["api_token"] = str(cfg.get("api_token") or "").strip()
+    cfg["notion_token"] = str(cfg.get("notion_token") or "").strip()
+    cfg["notion_database_id"] = str(cfg.get("notion_database_id") or "").strip()
+    cfg["auto_sync"] = bool(cfg.get("auto_sync", True))
     return cfg
 
 

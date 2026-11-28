@@ -3,7 +3,7 @@
 <img src="assets/logo.svg" width="88" alt="Rakez logo" />
 
 # Rakez ركّز
-**نظام إنتاجية شخصي كامل: بومودورو عائم + مهام ومشاريع + مدرب ذكي + مزامنة مع Joplin وGoogle.**
+**نظام إنتاجية شخصي كامل: بومودورو عائم + مهام ومشاريع + مدرب ذكي + مزامنة تلقائية مع Joplin وGoogle Tasks وNotion.**
 
 [![Release](https://img.shields.io/github/v/release/mostafa-elwakil/lifebot?label=latest&color=7aa2f7)](https://github.com/mostafa-elwakil/lifebot/releases/latest)
 [![Build](https://github.com/mostafa-elwakil/lifebot/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mostafa-elwakil/lifebot/actions/workflows/build-windows.yml)
@@ -35,11 +35,14 @@
 - خطة صباحية، حل الأعذار، ومراجعة يومية.
 - يعمل مع **Gemini** عند إضافة المفتاح، وبدونه يقدّم وضع **Offline** مفيدًا بدون إنترنت.
 
-### 🔄 مزامنة ثنائية الاتجاه
+### 🔄 مزامنة تلقائية مع Joplin وGoogle Tasks وNotion
+- **إجراء واحد لكل الخدمات**: إضافة المهمة أو تعديلها أو إتمامها أو إعادة فتحها أو حذفها يُحدّث كل خدمة متصلة في الخلفية — من الواجهة أو الودجت العائم أو سطر الأوامر أو الـ API المحلي.
 - **Joplin**: مهامك تظهر فورًا في `Projects/Lifebot/Tasks` مع tags وموعد استحقاق، وسحب مهام Joplin للبرنامج (زر Pull + تلقائي عند التشغيل). أمر `dedupe` لتنظيف التكرار.
-- **Google Tasks**: دفع/سحب المهام.
+- **Google Tasks**: كل مهمة تُرسل تلقائيًا (بدون نسخ مكررة)، والإتمام والحذف ينتقلان معها.
+- **Notion**: قاعدة بيانات تختارها تستقبل المهام مع خصائص `Done` و`Category` و`Priority` و`Project` و`Completed at`، ويُنشئ ركّز الخصائص الناقصة عند أول مزامنة.
 - **Google Calendar**: تسجيل جلسات التركيز المنتهية كأحداث تلقائيًا.
-- **زر Test connection** يتحقق فعليًا من الصلاحيات، ورسائل أخطاء ودّية (مثل `access_denied` مع خطوات الحل).
+- **Sync now** لمزامنة كل المهام دفعة واحدة، و**Test connection** يتحقق فعليًا من الصلاحيات برسائل واضحة.
+- تفضّل التحكم اليدوي؟ أوقف **Sync tasks automatically** من **Settings → Integrations**.
 
 ### 📊 تحليلات وتقدّم
 - دقائق التركيز خلال 7 أيام، توزيع الدقائق حسب التصنيف، الأيام المتتالية (Streak)، المهام المنجزة.
@@ -112,7 +115,7 @@ python -m cli.app add "تصميم الصفحة" --project Website --priority hig
 python -m cli.app projects
 python -m cli.app stats --days 7
 python -m cli.app google-test          # فحص ربط Google
-python -m pytest tests -q              # 87 اختبارًا
+python -m pytest tests -q              # 115 اختبارًا
 ```
 
 ---
@@ -130,6 +133,8 @@ GOOGLE_CLIENT_SECRET=
 API_TOKEN=                 # لحماية الـ HTTP API المحلي (Bearer)
 TELEGRAM_BOT_TOKEN=        # توكن بوت من @BotFather (اختياري)
 TELEGRAM_CHAT_ID=          # معرّف محادثتك في تلجرام (اختياري)
+NOTION_TOKEN=              # Internal Integration Secret (اختياري)
+NOTION_DATABASE_ID=        # قاعدة بيانات Notion المستهدفة (اختياري)
 ```
 
 ### `config/config.yaml`
@@ -166,6 +171,17 @@ joplin:
 
 أوامر البوت: `/report` · `/tasks` · `/done N` · `/done id` · `/add عنوان | مشروع` · `/projects` · `/id` · `/help`.
 
+### ربط Notion (قاعدة بيانات المهام)
+
+1. افتح [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration** → انسخ **Internal Integration Secret**.
+2. في Rakez → **Settings → 🌐 API**: الصق التوكن → **💾 Save settings**.
+3. من Notion افتح قاعدة البيانات المطلوبة → **⋯ → Connections → أضف التكامل** (بدون هذه الخطوة يعيد الـ API الخطأ 404).
+4. انسخ معرّف الـ 32 حرفًا من رابط قاعدة البيانات والصقه في **Settings → 🔗 Integrations → 🗂️ Notion**.
+5. اضغط **🔌 Test** — يتحقق ركّز من قاعدة البيانات ويضيف الخصائص التي يحتاجها (`Rakez ID` و`Done` و`Category` و`Priority` و`Project` و`Completed at`).
+6. اضغط **🔄 Sync now** لإرسال المهام الحالية، وبعدها تُرسل المهام الجديدة تلقائيًا.
+
+> عنوان الصفحة يُحفظ في خاصية العنوان الموجودة أصلًا في القاعدة، لذلك تصلح أي قاعدة. وإتمام المهمة في ركّز يعلّم `Done` في Notion أيضًا.
+
 ---
 
 ## 🖥️ الاستخدام | Usage
@@ -175,7 +191,7 @@ joplin:
 | التبويب | الوظيفة |
 |---|---|
 | ⏱️ Pomodoro | اختر مهمة ومدة → أرسلها للودجت العائم وابدأ |
-| 📋 Tasks | إضافة/إتمام/حذف، مشاريع ونسبة إنجاز، دفع وسحب Joplin وGoogle |
+| 📋 Tasks | إضافة/إتمام/حذف، مشاريع ونسبة إنجاز، مزامنة تلقائية مع Joplin وGoogle Tasks وNotion |
 | 🧠 Hermes | خطة صباحية / حل عذر / مراجعة يومية |
 | 📊 Analytics | إحصاءات التركيز والتصنيفات وStreak |
 | ⚙️ Settings | أقسام جانبية: عام، المظهر، الودجت العائم، التكاملات، **API** (كل المفاتيح + خادم HTTP المحلي)، التحديثات |
@@ -195,6 +211,8 @@ python -m cli.app stats --days 7
 python -m cli.app plan | python -m cli.app review
 python -m cli.app dedupe [--apply]
 python -m cli.app google-test [--authorize]
+python -m cli.app notion-test                  # فحص توكن Notion وقاعدة البيانات
+python -m cli.app sync                         # إرسال المهام لكل التكاملات
 python -m cli.app telegram-test                # فحص التوكن + رسالة تجريبية
 python -m cli.app telegram-chat-id             # اكتشاف معرّف المحادثة
 python -m cli.app telegram-report [--no-send]  # التقرير (وإرساله إلى تلجرام)
@@ -231,7 +249,7 @@ python -m cli.app serve --port 8765
 ## 🧪 التطوير والبناء
 
 ```bash
-python -m pytest tests -q          # 91 اختبارًا
+python -m pytest tests -q          # 115 اختبارًا
 
 python packaging/build_windows.py  # dist/Rakez.exe
 iscc packaging/Rakez.iss           # dist/Rakez-Setup-<version>.exe
@@ -256,6 +274,8 @@ core/
   coach.py            Hermes (Gemini + Offline)
   joplin.py           عميل Joplin Web Clipper
   google_sync.py      Calendar + Tasks (OAuth2)
+  notion.py           عميل مزامنة Notion
+  sync.py             محرك المزامنة الموحّد (Joplin / Google / Notion)
   telegram.py         بوت تلجرام (تقارير + أوامر)
   updater.py          فحص/تنزيل/تثبيت التحديثات
   api.py              HTTP API محلي
@@ -264,7 +284,7 @@ cli/app.py            أوامر Typer
 config/               config.yaml + prompt.py
 website/              الموقع التسويقي (GitHub Pages)
 packaging/            PyInstaller + Inno Setup + Linux
-tests/                87 اختبارًا
+tests/                115 اختبارًا
 ```
 
 ---

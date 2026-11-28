@@ -12,7 +12,7 @@
 <link rel="alternate" hreflang="ar" href="https://mostafa-elwakil.github.io/lifebot/ar/" />
 <link rel="alternate" hreflang="en" href="https://mostafa-elwakil.github.io/lifebot/" />
 <link rel="alternate" hreflang="x-default" href="https://mostafa-elwakil.github.io/lifebot/" />
-<link rel="stylesheet" href="styles.css?v=2.2.0" />
+<link rel="stylesheet" href="styles.css?v=2.3.0" />
 
 <meta property="og:type" content="website" />
 <meta property="og:title" content="Rakez — Floating Pomodoro + Projects &amp; Tasks + AI Coach" />
@@ -33,7 +33,7 @@
   "description": "Floating Pomodoro timer above every app, projects and tasks with progress, an AI coach, and Joplin / Google sync.",
   "url": "https://mostafa-elwakil.github.io/lifebot/",
   "downloadUrl": "https://github.com/mostafa-elwakil/lifebot/releases/latest",
-  "softwareVersion": "2.2.0",
+  "softwareVersion": "2.3.0",
   "inLanguage": "en",
   "author": { "@type": "Person", "name": "Mostafa Elwakil" },
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
@@ -98,7 +98,7 @@
         <p class="lede">
           One productivity system that brings together a <strong>floating Pomodoro timer</strong> above
           every app, <strong>projects and tasks with progress</strong>, an <strong>AI coach</strong>,
-          and sync with <strong>Joplin</strong> and <strong>Google</strong> — with a bilingual
+          and automatic sync with <strong>Joplin</strong>, <strong>Google Tasks</strong> and <strong>Notion</strong> — with a bilingual
           interface and light &amp; dark themes.
         </p>
         <div class="hero-cta">
@@ -201,8 +201,8 @@
 
         <article class="card reveal">
           <div class="card-ico bg-amber">📅</div>
-          <h3>Google Calendar &amp; Tasks</h3>
-          <p>Log finished focus sessions as calendar events automatically, and push/pull Google Tasks. The “Test connection” button really checks your permissions.</p>
+          <h3>Automatic sync everywhere</h3>
+          <p>Add, edit, complete or delete a task once — Rakez updates Google Tasks, Joplin and Notion in the background, with no duplicate copies. “Test connection” really checks your permissions.</p>
         </article>
 
         <article class="card reveal">
@@ -329,7 +329,14 @@
           <div class="int-logo gtask">✓</div>
           <div>
             <h3>Google Tasks</h3>
-            <p>Push and pull tasks between Rakez and Google Tasks — no copy-paste.</p>
+            <p>Every task is pushed automatically, and completing or deleting it in Rakez follows through — no copy-paste, no duplicates.</p>
+          </div>
+        </div>
+        <div class="integration reveal">
+          <div class="int-logo notion">N</div>
+          <div>
+            <h3>Notion</h3>
+            <p>Send tasks to a database of your choice with done, category, priority, project and completion date. Rakez prepares the properties for you.</p>
           </div>
         </div>
         <div class="integration reveal">
@@ -428,6 +435,10 @@
           <p>Create an OAuth Client of type <em>Desktop app</em> in Google Cloud Console, enable Calendar and Tasks, add your email under <strong>Test users</strong>, then paste the Client ID and Secret into <strong>Settings → API</strong> and press <em>Authorize</em>, then <em>Test connection</em>.</p>
         </details>
         <details>
+          <summary>How do I set up Notion?</summary>
+          <p>Create an integration at <em>notion.so/my-integrations</em>, share your database with it (⋯ → Connections), then paste the secret under <strong>Settings → API</strong> and the database ID under <strong>Settings → Integrations → Notion</strong>. Press <em>Test</em> and <em>Sync now</em>.</p>
+        </details>
+        <details>
           <summary>What happens to my data after an update?</summary>
           <p>Nothing. Your data lives in <code>%APPDATA%\Rakez\data</code>, separate from the program files, so it stays exactly as it is after every update.</p>
         </details>
@@ -472,10 +483,10 @@
   </div>
   <div class="container footer-bottom">
     <p>© <span data-year>2026</span> Mostafa Elwakil — made with ❤️</p>
-    <p class="muted">Rakez is not affiliated with Google or Joplin.</p>
+    <p class="muted">Rakez is not affiliated with Google, Joplin or Notion.</p>
   </div>
 </footer>
 
-<script src="main.js?v=2.2.0" defer></script>
+<script src="main.js?v=2.3.0" defer></script>
 </body>
 </html>
